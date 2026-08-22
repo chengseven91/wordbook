@@ -1730,9 +1730,25 @@ header {
     } catch (e) { return ''; }
   }
 
-  /* 词典：Free Dictionary 为主（音标+音频+词性+释义），
-     失败依次回退 Wiktionary（标准 IPA）、Datamuse（WordNet 短释义 + ARPAbet 转 IPA）、Urban Dictionary（流行词） */
-  async function fetchDict(word) {
+  /* 多个 Promise 竞速：返回第一个非空结果，全部失败返回 null */
+  function firstSuccess(promises) {
+    return new Promise(resolve => {
+      let pending = promises.length;
+      if (!pending) return resolve(null);
+      let done = false;
+      promises.forEach(p => {
+        Promise.resolve(p).then(v => {
+          if (!done && v) { done = true; resolve(v); }
+        }).catch(() => {}).finally(() => {
+          if (--pending === 0 && !done) { done = true; resolve(null); }
+        });
+      });
+    });
+  }
+
+  /* 词典：Free Dictionary 与 Datamuse（含 Wiktionary IPA）并行竞速，谁先返回用谁；
+     都失败再回退 Urban Dictionary。国内网络下 Datamuse 直连可达，秒级出结果 */
+  async function fetchFreeDict(word) {
     try {
       const r = await fetchTimeout('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(word), 8000);
       if (r.ok) {
@@ -1752,21 +1768,23 @@ header {
         }
       }
     } catch (e) {}
-    let wiktionaryIpa = '';
+    return null;
+  }
+
+  async function fetchDatamuseDict(word) {
+    const ipaP = fetchWiktionaryIpa(word).catch(() => '');
     try {
-      wiktionaryIpa = await fetchWiktionaryIpa(word);
-    } catch (e) {}
-    try {
-      const r = await fetchTimeout('https://api.datamuse.com/words?sp=' + encodeURIComponent(word) + '&md=rdf&max=3', 6000);
+      const r = await fetchTimeout('https://api.datamuse.com/words?sp=' + encodeURIComponent(word) + '&md=rdf&max=3', 7000);
       if (r.ok) {
         const arr = await r.json();
         if (arr && arr.length) {
           const w = arr.find(x => (x.word || '').toLowerCase() === word) || arr[0];
-          let phonetic = wiktionaryIpa;
+          let phonetic = '';
           if (w.tags) {
             const pronTag = w.tags.find(t => typeof t === 'string' && t.indexOf('pron:') === 0);
             if (pronTag) phonetic = arpabetToIpa(pronTag.slice(5).trim());
           }
+          if (!phonetic) phonetic = await ipaP;
           const defs = [], syns = [];
           (w.defs || []).forEach(df => {
             const i = df.indexOf(':');
@@ -1779,6 +1797,10 @@ header {
         }
       }
     } catch (e) {}
+    return null;
+  }
+
+  async function fetchUrbanDict(word) {
     try {
       const r = await fetchTimeout('https://api.urbandictionary.com/v0/define?term=' + encodeURIComponent(word), 6000);
       if (r.ok) {
@@ -1795,6 +1817,12 @@ header {
       }
     } catch (e) {}
     return null;
+  }
+
+  async function fetchDict(word) {
+    const first = await firstSuccess([fetchFreeDict(word), fetchDatamuseDict(word)]);
+    if (first) return first;
+    return fetchUrbanDict(word);
   }
 
   /* 翻译：优先 Google Translate API（dt=bd 结构化多义），失败 fallback 到 MyMemory */
@@ -1844,25 +1872,57 @@ header {
     }).filter(Boolean).join('') + '</div>';
   }
 
-  async function translateCn(word) {
-    // 优先使用 Google 结构化多义翻译（dt=bd 返回按词性分组的中文释义）
+  /* Google 结构化翻译：直连（海外网络快） */
+  async function fetchGoogleDirect(word) {
     try {
-      const r = await fetchTimeout('https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&dt=bd&q=' + encodeURIComponent(word), 7000);
+      const r = await fetchTimeout('https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&dt=bd&q=' + encodeURIComponent(word), 6000);
       if (r.ok) {
         const d = await r.json();
         const parsed = parseGoogleCn(d);
-        if (isRealTranslation(parsed.text, word)) return parsed;
+        if (isRealTranslation(parsed.text, word) || parsed.cnDefs) return parsed;
       }
     } catch (e) {}
-    // Google 失败时 fallback 到 MyMemory（仅返回单个翻译文本）
+    return null;
+  }
+
+  /* Google 结构化翻译：经 r.jina.ai 代理（国内可达，绕过 Google 被墙） */
+  async function fetchGoogleViaJina(word) {
     try {
-      const r = await fetchTimeout('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(word) + '&langpair=en|zh-CN', 8000);
+      const r = await fetchTimeout('https://r.jina.ai/https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&dt=bd&q=' + encodeURIComponent(word), 10000);
+      if (r.ok) {
+        const t = await r.text();
+        const i = t.indexOf('[[[');
+        if (i === -1) return null;
+        const d = JSON.parse(t.slice(i));
+        const parsed = parseGoogleCn(d);
+        if (isRealTranslation(parsed.text, word) || parsed.cnDefs) return parsed;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  /* MyMemory 直连兜底（国内外均可达，但只有单个翻译） */
+  async function fetchMyMemory(word) {
+    try {
+      const r = await fetchTimeout('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(word) + '&langpair=en|zh-CN', 7000);
       if (r.ok) {
         const d = await r.json();
         const t = d.responseData && d.responseData.translatedText;
         if (t && t.indexOf('MYMEMORY') === -1 && t.indexOf('INVALID') === -1 && isRealTranslation(t, word)) return { text: t.trim(), cnDefs: null };
       }
     } catch (e) {}
+    return null;
+  }
+
+  /* 翻译：Google 直连 / Google 经 jina 代理 / MyMemory 三路并行竞速，
+     优先采用带词性分组的结构化结果（cnDefs），等不到再用单条文本兜底 */
+  async function translateCn(word) {
+    const structuredP = firstSuccess([fetchGoogleDirect(word), fetchGoogleViaJina(word)]);
+    const timeoutP = sleep(11000).then(() => null);
+    const structured = await Promise.race([structuredP, timeoutP]);
+    if (structured && (structured.cnDefs || structured.text)) return structured;
+    const plain = await fetchMyMemory(word);
+    if (plain) return plain;
     return { text: '', cnDefs: null };
   }
 
@@ -4336,18 +4396,22 @@ header {
     const defsEl = $('readerPopupDefs');
     const addBtn = $('readerPopupAdd');
     wordEl.textContent = word;
-    phoneticEl.textContent = '';
-    cnEl.innerHTML = '';
+    phoneticEl.textContent = '...';
+    cnEl.innerHTML = '<div style="font-size:13px;color:var(--text-light);">释义查询中...</div>';
     defsEl.innerHTML = '';
     addBtn.textContent = '+ 加入生词本';
     addBtn.classList.remove('saved');
     popup.classList.add('active');
     positionPopup(x, y);
 
-    const [dict, cn] = await Promise.all([fetchDict(word), translateCn(word)]);
-    const r = buildResult(word, dict, cn);
-    phoneticEl.textContent = r.phonetic || '';
-    cnEl.innerHTML = formatCnDefsHtml(r.cnDefs) || (r.chinese ? '<div style="margin-top:8px;font-size:14px;color:var(--text);">' + escapeHtml(r.chinese) + '</div>' : '');
+    let dict = null, cn = { text: '', cnDefs: null };
+    let r = buildResult(word, dict, cn);
+    function updatePopup() {
+      r = buildResult(word, dict, cn);
+      phoneticEl.textContent = r.phonetic || '';
+      cnEl.innerHTML = formatCnDefsHtml(r.cnDefs) || (r.chinese && r.chinese.indexOf('未获取') === -1 ? '<div style="margin-top:8px;font-size:14px;color:var(--text);">' + escapeHtml(r.chinese) + '</div>' : (cnEl.innerHTML || ''));
+      positionPopup(x, y);
+    }
 
     addBtn.onclick = () => {
       readerSaveToWordBook(r);
@@ -4355,6 +4419,9 @@ header {
       addBtn.classList.add('saved');
     };
     $('readerPopupSpeak').onclick = () => playWord(r.word, r.audioUrl);
+
+    fetchDict(word).then(d => { if (d) { dict = d; updatePopup(); } }).catch(() => {});
+    translateCn(word).then(t => { cn = t; updatePopup(); }).catch(() => {});
   }
 
   function positionPopup(x, y) {
