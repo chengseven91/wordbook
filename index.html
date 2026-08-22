@@ -869,6 +869,16 @@ header {
 .reader-search-box:focus-within { background: var(--surface-3); box-shadow: 0 0 0 3px var(--accent-soft); }
 .reader-search-box input { flex: 1; font-size: 16px; padding: 10px 2px; min-width: 0; background: transparent; }
 .reader-search-box input::placeholder { color: var(--text-3); }
+.reader-clear-btn {
+  flex-shrink: 0; width: 24px; height: 24px; margin-right: 2px;
+  border-radius: 50%; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface-3); color: var(--text-3);
+  transition: background .2s, color .2s; padding: 0;
+}
+.reader-clear-btn svg { width: 13px; height: 13px; }
+.reader-clear-btn:hover { background: var(--text-3); color: #fff; }
+.reader-clear-btn:active { transform: scale(0.9); }
 .reader-search-btn {
   padding: 10px 16px; border-radius: 10px; flex-shrink: 0;
   background: var(--text); color: #fff; font-size: 14px; font-weight: 600;
@@ -1228,6 +1238,7 @@ header {
       <div class="reader-search-box" id="listenSearchBox">
         <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
         <input type="text" id="listenSearchInput" placeholder="搜索 Gutenberg 公版书（英文书名或作者）..." autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
+        <button class="reader-clear-btn hidden" id="listenClearBtn" aria-label="清空搜索"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
         <button class="reader-search-btn" id="listenSearchBtn">搜索</button>
       </div>
       <div class="reader-paste-area hidden" id="listenPasteArea">
@@ -3874,7 +3885,11 @@ header {
     const r = await fetchTimeout('https://gutendex.com/books/?search=' + encodeURIComponent(query), 10000);
     if (!r.ok) throw new Error('搜索失败');
     const d = await r.json();
-    return (d.results || []).slice(0, 10);
+    const hasText = b => Object.keys(b.formats || {}).some(k => k.indexOf('text/plain') !== -1);
+    return (d.results || [])
+      .filter(hasText)
+      .concat((d.results || []).filter(b => !hasText(b)))
+      .slice(0, 10);
   }
 
   const FEATURED_BOOK_IDS = [
@@ -4137,7 +4152,7 @@ header {
 
   function renderGutenbergResults(books) {
     const el = $('listenGutenbergResults');
-    if (!books || !books.length) { el.innerHTML = '<div class="reader-empty">未找到相关书籍，换个关键词试试</div>'; return; }
+    if (!books || !books.length) { el.innerHTML = '<div class="reader-empty">未找到这本书<br>Gutenberg 只收录版权过期的公版书（约 1930 年以前出版）<br>畅销新书（如 Harry Potter、The Hunger Games）因版权保护不在库中<br>建议搜索经典书名或作者名，如 Austen、Dickens、Twain、Holmes</div>'; return; }
     el.innerHTML = '<div class="reader-section-title">搜索结果 · Gutenberg</div>' + books.map(b => {
       const author = (b.authors && b.authors[0] && b.authors[0].name) || '未知作者';
       const hasText = Object.keys(b.formats || {}).some(k => k.indexOf('text/plain') !== -1);
@@ -4357,6 +4372,17 @@ header {
       });
     });
     $('listenSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('listenSearchBtn').click(); });
+    const clearBtn = $('listenClearBtn');
+    $('listenSearchInput').addEventListener('input', () => {
+      clearBtn.classList.toggle('hidden', !$('listenSearchInput').value);
+    });
+    clearBtn.addEventListener('click', () => {
+      $('listenSearchInput').value = '';
+      clearBtn.classList.add('hidden');
+      $('listenGutenbergResults').innerHTML = '';
+      showListenCatalog();
+      $('listenSearchInput').focus();
+    });
     document.querySelectorAll('[data-listen-source]').forEach(btn => {
       btn.addEventListener('click', () => setListenSource(btn.dataset.listenSource));
     });
