@@ -912,9 +912,15 @@ header {
 .reader-cover-placeholder {
   width: 100%; height: 100%;
   display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--surface-2), var(--surface-3));
-  color: var(--text-3); font-size: 12px; text-align: center;
+  background: linear-gradient(135deg, #f0f4ff 0%, #e8eefc 100%);
+  color: #4a5568; font-size: 12px; font-weight: 600; text-align: center;
   padding: 12px; line-height: 1.4;
+}
+.reader-cover-initial {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 42px; font-weight: 700; color: rgba(255,255,255,0.95);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 .reader-catalog-title {
   font-size: 13px; font-weight: 600; color: var(--text);
@@ -3924,14 +3930,30 @@ header {
       scroll.innerHTML = '<div class="reader-catalog-loading">暂无推荐书籍</div>';
       return;
     }
-    scroll.innerHTML = books.map(b => {
+    const gradients = [
+      'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+      'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+      'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+      'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+      'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+      'linear-gradient(135deg, #8fd3f4 0%, #84fab0 100%)',
+      'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)',
+      'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+      'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)',
+      'linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%)',
+      'linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)'
+    ];
+    scroll.innerHTML = books.map((b, idx) => {
       const author = (b.authors && b.authors[0] && b.authors[0].name) || '未知作者';
       const coverUrl = (b.formats && b.formats['image/jpeg']) || '';
       const hasText = Object.keys(b.formats || {}).some(k => k.indexOf('text/plain') !== -1);
+      const gradient = gradients[idx % gradients.length];
+      const initial = escapeHtml((b.title || 'B').slice(0, 1).toUpperCase());
+      const placeholder = '<div class="reader-cover-placeholder" style="background:' + gradient + '"><div class="reader-cover-initial">' + initial + '</div></div>';
       const cover = coverUrl
-        ? '<img src="' + escapeHtml(coverUrl) + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.parentNode.querySelector(\'.reader-cover-placeholder\').style.display=\'flex\';">' +
-          '<div class="reader-cover-placeholder" style="display:none">' + escapeHtml(truncateText(b.title, 28)) + '</div>'
-        : '<div class="reader-cover-placeholder">' + escapeHtml(truncateText(b.title, 28)) + '</div>';
+        ? '<img src="' + escapeHtml(coverUrl) + '" alt="" loading="lazy" onerror="this.style.display=\'none\';">' + placeholder
+        : placeholder;
       return '<div class="reader-catalog-book' + (hasText ? '' : ' reader-catalog-disabled') + '" data-guten-id="' + escapeHtml(String(b.id)) + '">' +
         '<div class="reader-catalog-cover">' + cover + '</div>' +
         '<div class="reader-catalog-title" title="' + escapeHtml(b.title || '未命名') + '">' + escapeHtml(b.title || '未命名') + '</div>' +
