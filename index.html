@@ -1797,7 +1797,7 @@ header {
     return null;
   }
 
-  /* 翻译：优先 Google（dt=bd 结构化多义），失败 fallback 到 MyMemory */
+  /* 翻译：优先 Google Translate API（dt=bd 结构化多义），失败 fallback 到 MyMemory */
   function isRealTranslation(t, word) {
     const norm = t.toLowerCase().replace(/[^a-z\u4e00-\u9fa5]/g, '');
     const w = word.toLowerCase().replace(/[^a-z]/g, '');
@@ -1847,7 +1847,7 @@ header {
   async function translateCn(word) {
     // 优先使用 Google 结构化多义翻译（dt=bd 返回按词性分组的中文释义）
     try {
-      const r = await fetchTimeout('https://translate.google.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&dt=bd&q=' + encodeURIComponent(word), 7000);
+      const r = await fetchTimeout('https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&dt=bd&q=' + encodeURIComponent(word), 7000);
       if (r.ok) {
         const d = await r.json();
         const parsed = parseGoogleCn(d);
