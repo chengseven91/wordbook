@@ -293,6 +293,15 @@ header {
 /* 生词本主体：列表 + 右侧 A-Z 索引条 */
 .wb-body { display: flex; gap: 10px; margin-top: 8px; }
 .word-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding-bottom: 20px; }
+.wb-review-entry { margin-top: 8px; padding: 0 4px 20px; }
+.wb-review-btn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px; border-radius: var(--radius-md);
+  background: var(--text); color: #fff; font-size: 15px; font-weight: 600;
+  box-shadow: var(--shadow-sm); transition: transform .1s, opacity .2s;
+}
+.wb-review-btn:active { transform: scale(0.985); opacity: .9; }
+.wb-review-btn svg { width: 18px; height: 18px; }
 
 .wb-group { scroll-margin-top: 118px; }
 .wb-group-head { display: flex; align-items: center; gap: 10px; margin: 4px 0 8px; padding: 0 4px; }
@@ -834,7 +843,22 @@ header {
 }
 
 /* ---------- 听阅 (Reader) ---------- */
-.reader-search-wrap { margin-top: 16px; }
+#view-listen { display: none; flex-direction: column; }
+#view-listen.active { display: flex; }
+.reader-search-card {
+  margin-top: 16px;
+  background: var(--surface); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); padding: 14px;
+}
+.reader-search-tabs {
+  display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;
+}
+.reader-search-tab {
+  padding: 7px 13px; border-radius: 20px; font-size: 13px;
+  background: var(--surface-2); color: var(--text-2);
+  border: none; cursor: pointer; transition: all .2s;
+}
+.reader-search-tab.active { background: var(--text); color: #fff; }
 .reader-search-box {
   display: flex; align-items: center; gap: 6px;
   border-radius: var(--radius-md);
@@ -848,26 +872,32 @@ header {
 .reader-search-btn {
   padding: 10px 16px; border-radius: 10px; flex-shrink: 0;
   background: var(--text); color: #fff; font-size: 14px; font-weight: 600;
-  transition: opacity .2s, transform .1s;
+  transition: opacity .2s, transform .1s; border: none; cursor: pointer;
 }
 .reader-search-btn:active { transform: scale(0.97); }
-.reader-source-tabs {
-  display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap;
-}
-.reader-source-tab {
-  padding: 8px 14px; border-radius: 20px; font-size: 13px;
-  background: var(--surface); color: var(--text-2);
-  box-shadow: var(--shadow-sm); transition: all .2s;
-}
-.reader-source-tab.active { background: var(--text); color: #fff; }
+.reader-results { margin-top: 14px; }
 .reader-section-title {
   font-size: 13px; font-weight: 600; color: var(--text-3);
   text-transform: uppercase; letter-spacing: 1px;
-  margin: 22px 0 10px;
 }
+.reader-library {
+  flex: 1; display: flex; flex-direction: column; min-height: 0;
+  margin-top: 16px; background: var(--surface);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow);
+  padding: 14px;
+}
+.reader-library-head { margin-bottom: 10px; }
+.reader-library-body { flex: 1; min-height: 0; overflow-y: auto; }
 .reader-empty {
-  text-align: center; color: var(--text-3); font-size: 13px;
-  margin-top: 40px; line-height: 2;
+  height: 100%; min-height: 220px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; color: var(--text-3); font-size: 14px; line-height: 1.8;
+}
+.reader-empty p { margin: 0; }
+.reader-empty-sub { font-size: 13px; color: var(--text-3); opacity: .8; margin-top: 6px !important; }
+.reader-empty-icon {
+  width: 44px; height: 44px; margin-bottom: 12px;
+  color: var(--text-3); opacity: .45;
 }
 .reader-card {
   background: var(--surface); border-radius: var(--radius-lg);
@@ -1004,7 +1034,6 @@ header {
       <button class="tab active" data-tab="search">查词</button>
       <button class="tab" data-tab="wordbook">生词本 <span class="badge hidden" id="wbBadgeD">0</span></button>
       <button class="tab" data-tab="script">剧本 <span class="badge hidden" id="scBadgeD">0</span></button>
-      <button class="tab" data-tab="review">复习</button>
       <button class="tab" data-tab="listen">听阅</button>
     </nav>
   </header>
@@ -1055,6 +1084,12 @@ header {
     <div class="wb-body">
       <div class="word-list" id="wordList"></div>
       <div class="alpha-index hidden" id="alphaIndex"></div>
+    </div>
+    <div class="wb-review-entry">
+      <button class="wb-review-btn" id="wbReviewBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/></svg>
+        开始复习
+      </button>
     </div>
   </section>
 
@@ -1124,36 +1159,45 @@ header {
 
   <!-- ======== 听阅 ======== -->
   <section class="view" id="view-listen">
-    <div class="reader-search-wrap" id="listenSearchWrap">
-      <div class="reader-search-box">
+    <div class="reader-search-card">
+      <div class="reader-search-tabs">
+        <button class="reader-search-tab active" data-listen-source="gutenberg">Gutenberg</button>
+        <button class="reader-search-tab" data-listen-source="paste">粘贴文本</button>
+        <button class="reader-search-tab" data-listen-source="upload">上传 .txt</button>
+      </div>
+      <div class="reader-search-box" id="listenSearchBox">
         <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
         <input type="text" id="listenSearchInput" placeholder="搜索 Gutenberg 公版书（英文书名或作者）..." autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
         <button class="reader-search-btn" id="listenSearchBtn">搜索</button>
       </div>
-      <div class="reader-source-tabs">
-        <button class="reader-source-tab active" data-listen-source="gutenberg">Gutenberg 搜索</button>
-        <button class="reader-source-tab" data-listen-source="paste">粘贴文本</button>
-        <button class="reader-source-tab" data-listen-source="upload">上传 .txt</button>
+      <div class="reader-paste-area hidden" id="listenPasteArea">
+        <input type="text" id="listenPasteTitle" placeholder="文献标题（如：经济学人片段）...">
+        <textarea id="listenPasteText" placeholder="把英文文本粘贴到这里..."></textarea>
+        <div class="reader-paste-row">
+          <button class="reader-search-btn" id="listenPasteSaveBtn">保存到听阅</button>
+        </div>
+      </div>
+      <div class="reader-paste-area hidden" id="listenUploadArea">
+        <button class="reader-search-btn" id="listenUploadBtn">选择 .txt 文件</button>
+        <input type="file" id="listenFileInput" class="reader-file-input" accept=".txt,text/plain">
+        <p class="reader-card-meta" style="margin-top:8px;">从手机或电脑选择纯文本文件导入。</p>
       </div>
     </div>
+
     <div id="listenGutenbergResults" class="reader-results"></div>
-    <div class="reader-paste-area hidden" id="listenPasteArea">
-      <input type="text" id="listenPasteTitle" placeholder="文献标题（如：经济学人片段）...">
-      <textarea id="listenPasteText" placeholder="把英文文本粘贴到这里..."></textarea>
-      <div class="reader-paste-row">
-        <button class="reader-search-btn" id="listenPasteSaveBtn">保存到听阅</button>
+
+    <div class="reader-library">
+      <div class="reader-library-head">
+        <div class="reader-section-title">我的文献</div>
       </div>
-    </div>
-    <div class="reader-paste-area hidden" id="listenUploadArea">
-      <button class="reader-search-btn" id="listenUploadBtn">选择 .txt 文件</button>
-      <input type="file" id="listenFileInput" class="reader-file-input" accept=".txt,text/plain">
-      <p class="reader-card-meta" style="margin-top:8px;">从手机或电脑选择纯文本文件导入。</p>
-    </div>
-    <div class="reader-section-title">我的文献</div>
-    <div id="listenList"></div>
-    <div class="reader-empty hidden" id="listenEmpty">
-      还没有文献<br>
-      搜索 Gutenberg 公版书、粘贴英文文本或上传 .txt 文件开始学习
+      <div class="reader-library-body">
+        <div id="listenList"></div>
+        <div class="reader-empty hidden" id="listenEmpty">
+          <svg class="reader-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+          <p>还没有文献</p>
+          <p class="reader-empty-sub">搜索 Gutenberg 公版书、粘贴英文文本或上传 .txt 文件开始学习</p>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -1171,10 +1215,6 @@ header {
     <button class="tab" data-tab="script">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h10"/><path d="M7 13h10"/><path d="M7 17h6"/></svg>
       剧本 <span class="badge hidden" id="scBadgeM">0</span>
-    </button>
-    <button class="tab" data-tab="review">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/></svg>
-      复习
     </button>
     <button class="tab" data-tab="listen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg>
@@ -1368,6 +1408,9 @@ header {
   document.querySelectorAll('.tab[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
+  if ($('wbReviewBtn')) {
+    $('wbReviewBtn').addEventListener('click', () => switchTab('review'));
+  }
   function switchTab(tab) {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     $('view-' + tab).classList.add('active');
@@ -3950,6 +3993,7 @@ header {
 
   function setListenSource(source) {
     document.querySelectorAll('[data-listen-source]').forEach(btn => btn.classList.toggle('active', btn.dataset.listenSource === source));
+    $('listenSearchBox').classList.toggle('hidden', source !== 'gutenberg');
     $('listenGutenbergResults').classList.toggle('hidden', source !== 'gutenberg');
     $('listenPasteArea').classList.toggle('hidden', source !== 'paste');
     $('listenUploadArea').classList.toggle('hidden', source !== 'upload');
