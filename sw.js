@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shengciben-v43';
+const CACHE_NAME = 'shengciben-v44';
 const CORE_ASSETS = [
   './',
   './index.html',
