@@ -832,6 +832,151 @@ header {
   .sc-detail-head { flex-wrap: wrap; }
   .sc-detail-title { flex-basis: 100%; order: -1; }
 }
+
+/* ---------- 听阅 (Reader) ---------- */
+.reader-search-wrap { margin-top: 16px; }
+.reader-search-box {
+  display: flex; align-items: center; gap: 6px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  padding: 5px 5px 5px 14px;
+  transition: background .2s, box-shadow .2s;
+}
+.reader-search-box:focus-within { background: var(--surface-3); box-shadow: 0 0 0 3px var(--accent-soft); }
+.reader-search-box input { flex: 1; font-size: 16px; padding: 10px 2px; min-width: 0; background: transparent; }
+.reader-search-box input::placeholder { color: var(--text-3); }
+.reader-search-btn {
+  padding: 10px 16px; border-radius: 10px; flex-shrink: 0;
+  background: var(--text); color: #fff; font-size: 14px; font-weight: 600;
+  transition: opacity .2s, transform .1s;
+}
+.reader-search-btn:active { transform: scale(0.97); }
+.reader-source-tabs {
+  display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap;
+}
+.reader-source-tab {
+  padding: 8px 14px; border-radius: 20px; font-size: 13px;
+  background: var(--surface); color: var(--text-2);
+  box-shadow: var(--shadow-sm); transition: all .2s;
+}
+.reader-source-tab.active { background: var(--text); color: #fff; }
+.reader-section-title {
+  font-size: 13px; font-weight: 600; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 1px;
+  margin: 22px 0 10px;
+}
+.reader-empty {
+  text-align: center; color: var(--text-3); font-size: 13px;
+  margin-top: 40px; line-height: 2;
+}
+.reader-card {
+  background: var(--surface); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); padding: 16px; margin-bottom: 12px;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: transform .15s;
+}
+.reader-card:active { transform: scale(0.99); }
+.reader-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.reader-card-title { font-size: 16px; font-weight: 600; color: var(--text); line-height: 1.35; }
+.reader-card-meta { font-size: 12.5px; color: var(--text-3); }
+.reader-card-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.reader-card-btn {
+  font-size: 12.5px; font-weight: 600; color: var(--accent);
+  padding: 5px 10px; border-radius: 8px; background: var(--accent-soft);
+  border: none; cursor: pointer; transition: all .15s;
+}
+.reader-card-btn:active { transform: scale(0.95); }
+.reader-card-btn.danger { color: var(--danger); background: rgba(255,59,48,0.10); }
+.reader-card-btn:disabled { opacity: .4; cursor: not-allowed; }
+.reader-progress { margin-top: 2px; }
+.reader-progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-3); margin-bottom: 5px; }
+.reader-progress-track {
+  height: 5px; background: var(--surface-3); border-radius: 3px; overflow: hidden;
+}
+.reader-progress-fill {
+  height: 100%; width: 0%; background: var(--accent); border-radius: 3px;
+  transition: width .35s ease;
+}
+.reader-paste-area {
+  margin-top: 12px; background: var(--surface); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); padding: 14px;
+}
+.reader-paste-area textarea {
+  width: 100%; min-height: 140px; resize: vertical;
+  background: var(--surface-2); border-radius: var(--radius-sm);
+  padding: 12px; font-size: 15px; line-height: 1.6; border: none; outline: none;
+}
+.reader-paste-row { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
+.reader-paste-row input {
+  flex: 1; background: var(--surface-2); border-radius: var(--radius-sm);
+  padding: 10px 12px; font-size: 15px; border: none; outline: none;
+}
+.reader-file-input { display: none; }
+.reader-view {
+  position: fixed; inset: 0; z-index: 100;
+  background: var(--surface);
+  display: none; flex-direction: column;
+}
+.reader-view.active { display: flex; }
+.reader-view-head {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--hairline);
+  padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+  display: flex; align-items: center; gap: 12px;
+}
+.reader-view-title { flex: 1; font-size: 16px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reader-view-progress { font-size: 13px; color: var(--text-2); font-weight: 500; }
+.reader-view-body {
+  flex: 1; overflow-y: auto; padding: 20px 18px calc(24px + env(safe-area-inset-bottom));
+  line-height: 1.9; font-size: 17px; color: var(--text);
+  font-family: Georgia, "Times New Roman", serif;
+}
+.reader-view-body p { margin-bottom: 1.2em; text-indent: 0; }
+.reader-view-body .word { cursor: pointer; border-radius: 3px; transition: background .15s; }
+.reader-view-body .word:hover { background: var(--accent-soft); }
+.reader-popup {
+  position: absolute; z-index: 120;
+  background: var(--surface); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg); border: 1px solid var(--hairline);
+  width: min(320px, calc(100vw - 32px)); max-height: 380px; overflow-y: auto;
+  padding: 14px; display: none;
+}
+.reader-popup.active { display: block; }
+.reader-popup-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.reader-popup-word { font-size: 18px; font-weight: 700; }
+.reader-popup-phonetic { font-size: 14px; color: var(--text-2); }
+.reader-popup-speak {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent); background: var(--accent-soft); margin-left: auto;
+  border: none; cursor: pointer;
+}
+.reader-popup-speak svg { width: 16px; height: 16px; }
+.reader-popup-speak:active { transform: scale(0.92); }
+.reader-popup-add {
+  width: 100%; margin-top: 12px; padding: 10px;
+  border-radius: 10px; background: var(--text); color: #fff;
+  font-size: 14px; font-weight: 600; border: none; cursor: pointer;
+  transition: background .2s;
+}
+.reader-popup-add:active { transform: scale(0.98); }
+.reader-popup-add.saved { background: var(--success); }
+.reader-popup .cn-defs { margin-top: 8px; }
+.reader-popup .cn-def-row { font-size: 13px; line-height: 1.6; margin-bottom: 4px; }
+.reader-popup .cn-def-pos { color: var(--accent); font-weight: 600; margin-right: 6px; }
+.reader-popup .cn-def-meanings { color: var(--text-2); }
+.reader-popup .def-item { margin-top: 8px; font-size: 13px; color: var(--text-2); line-height: 1.5; }
+.reader-popup .pos { color: var(--accent); font-weight: 600; margin-right: 5px; }
+.reader-popup-close {
+  position: absolute; top: 8px; right: 8px; width: 24px; height: 24px;
+  color: var(--text-3); display: flex; align-items: center; justify-content: center;
+  background: none; border: none; font-size: 18px; cursor: pointer;
+}
+.reader-loading { text-align: center; color: var(--text-3); padding: 40px; font-size: 14px; }
+.reader-results { margin-top: 14px; }
+
 </style>
 </head>
 <body>
@@ -860,6 +1005,7 @@ header {
       <button class="tab" data-tab="wordbook">生词本 <span class="badge hidden" id="wbBadgeD">0</span></button>
       <button class="tab" data-tab="script">剧本 <span class="badge hidden" id="scBadgeD">0</span></button>
       <button class="tab" data-tab="review">复习</button>
+      <button class="tab" data-tab="listen">听阅</button>
     </nav>
   </header>
 
@@ -975,6 +1121,42 @@ header {
   </section>
 </div>
 
+
+  <!-- ======== 听阅 ======== -->
+  <section class="view" id="view-listen">
+    <div class="reader-search-wrap" id="listenSearchWrap">
+      <div class="reader-search-box">
+        <span class="s-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
+        <input type="text" id="listenSearchInput" placeholder="搜索 Gutenberg 公版书（英文书名或作者）..." autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
+        <button class="reader-search-btn" id="listenSearchBtn">搜索</button>
+      </div>
+      <div class="reader-source-tabs">
+        <button class="reader-source-tab active" data-listen-source="gutenberg">Gutenberg 搜索</button>
+        <button class="reader-source-tab" data-listen-source="paste">粘贴文本</button>
+        <button class="reader-source-tab" data-listen-source="upload">上传 .txt</button>
+      </div>
+    </div>
+    <div id="listenGutenbergResults" class="reader-results"></div>
+    <div class="reader-paste-area hidden" id="listenPasteArea">
+      <input type="text" id="listenPasteTitle" placeholder="文献标题（如：经济学人片段）...">
+      <textarea id="listenPasteText" placeholder="把英文文本粘贴到这里..."></textarea>
+      <div class="reader-paste-row">
+        <button class="reader-search-btn" id="listenPasteSaveBtn">保存到听阅</button>
+      </div>
+    </div>
+    <div class="reader-paste-area hidden" id="listenUploadArea">
+      <button class="reader-search-btn" id="listenUploadBtn">选择 .txt 文件</button>
+      <input type="file" id="listenFileInput" class="reader-file-input" accept=".txt,text/plain">
+      <p class="reader-card-meta" style="margin-top:8px;">从手机或电脑选择纯文本文件导入。</p>
+    </div>
+    <div class="reader-section-title">我的文献</div>
+    <div id="listenList"></div>
+    <div class="reader-empty hidden" id="listenEmpty">
+      还没有文献<br>
+      搜索 Gutenberg 公版书、粘贴英文文本或上传 .txt 文件开始学习
+    </div>
+  </section>
+
 <!-- Mobile bottom nav -->
 <nav class="bottom-nav">
   <div class="bottom-nav-inner">
@@ -994,8 +1176,37 @@ header {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/></svg>
       复习
     </button>
+    <button class="tab" data-tab="listen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg>
+      听阅
+    </button>
   </div>
 </nav>
+
+<!-- 听阅阅读器 -->
+<div class="reader-view" id="readerView">
+  <div class="reader-view-head">
+    <button class="wb-tool-btn" id="readerBackBtn">&larr; 返回</button>
+    <div class="reader-view-title" id="readerTitle">文献标题</div>
+    <div class="reader-view-progress" id="readerProgress">0%</div>
+  </div>
+  <div class="reader-view-body" id="readerBody"></div>
+</div>
+<div class="reader-popup" id="readerPopup">
+  <button class="reader-popup-close" id="readerPopupClose">&times;</button>
+  <div class="reader-popup-head">
+    <div>
+      <div class="reader-popup-word" id="readerPopupWord">word</div>
+      <div class="reader-popup-phonetic" id="readerPopupPhonetic"></div>
+    </div>
+    <button class="reader-popup-speak" id="readerPopupSpeak" title="朗读">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+    </button>
+  </div>
+  <div id="readerPopupCn"></div>
+  <div id="readerPopupDefs"></div>
+  <button class="reader-popup-add" id="readerPopupAdd">+ 加入生词本</button>
+</div>
 
 <div class="toast-container" id="toastContainer"></div>
 
@@ -1103,6 +1314,7 @@ header {
     // 云同步：启动时静默拉取云端最新数据
     loadCloudState();
     if (cloudState) syncNow(false);
+    initListenDB().then(() => renderLitList()).catch(() => {});
   }
   function save() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(wordBook));
@@ -1163,6 +1375,7 @@ header {
     if (tab === 'wordbook') renderWordBook();
     if (tab === 'script') renderScriptList();
     if (tab === 'review') { renderReviewStats(); setupReview(); }
+    if (tab === 'listen') renderLitList();
     stopVoice();
   }
 
@@ -3474,7 +3687,468 @@ header {
     });
   });
 
+
+  /* ========== 听阅 ========== */
+  const LISTEN_DB_NAME = 'shengciben_reader_v1';
+  const LISTEN_DB_STORE = 'documents';
+  let listenDB = null;
+  let currentLitId = null;
+  let currentLitDoc = null;
+  let readerSaveTimer = null;
+
+  function initListenDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(LISTEN_DB_NAME, 1);
+      req.onerror = () => reject(req.error);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(LISTEN_DB_STORE)) {
+          const store = db.createObjectStore(LISTEN_DB_STORE, { keyPath: 'id' });
+          store.createIndex('updatedAt', 'updatedAt', { unique: false });
+        }
+      };
+      req.onsuccess = (e) => { listenDB = e.target.result; resolve(listenDB); };
+    });
+  }
+
+  function listenTxn(mode) {
+    if (!listenDB) throw new Error('听阅数据库未初始化');
+    return listenDB.transaction(LISTEN_DB_STORE, mode).objectStore(LISTEN_DB_STORE);
+  }
+
+  function getAllLitDocs() {
+    return new Promise((resolve, reject) => {
+      const req = listenTxn('readonly').getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function getLitDoc(id) {
+    return new Promise((resolve, reject) => {
+      const req = listenTxn('readonly').get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function saveLitDoc(doc) {
+    return new Promise((resolve, reject) => {
+      doc.updatedAt = Date.now();
+      const req = listenTxn('readwrite').put(doc);
+      req.onsuccess = () => resolve(doc);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function deleteLitDoc(id) {
+    return new Promise((resolve, reject) => {
+      const req = listenTxn('readwrite').delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function countWords(text) {
+    const m = String(text).match(/[a-zA-Z]+/g);
+    return m ? m.length : 0;
+  }
+
+  function litId() { return 'lit_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8); }
+
+  async function searchGutendex(query) {
+    const r = await fetchTimeout('https://gutendex.com/books/?search=' + encodeURIComponent(query), 10000);
+    if (!r.ok) throw new Error('搜索失败');
+    const d = await r.json();
+    return (d.results || []).slice(0, 10);
+  }
+
+  async function downloadGutenbergText(book) {
+    const formats = book.formats || {};
+    const preferred = [
+      formats['text/plain; charset=utf-8'],
+      formats['text/plain; charset=us-ascii'],
+      formats['text/plain']
+    ].filter(Boolean);
+    if (!preferred.length) throw new Error('无可下载的纯文本格式');
+    let lastErr = null;
+    for (const url of preferred) {
+      try {
+        let r = await fetchTimeout(url, 15000).catch(() => null);
+        if (!r || !r.ok) {
+          const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
+          r = await fetchTimeout(proxyUrl, 20000).catch(() => null);
+        }
+        if (!r || !r.ok) {
+          const proxyUrl2 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+          r = await fetchTimeout(proxyUrl2, 20000).catch(() => null);
+        }
+        if (r.ok) {
+          const text = await r.text();
+          if (text && text.length > 200) return cleanGutenbergText(text);
+        }
+      } catch (e) { lastErr = e; }
+    }
+    throw lastErr || new Error('无法下载该书文本，请尝试搜索其他书籍');
+  }
+
+  function cleanGutenbergText(text) {
+    const startMarkers = ['*** START OF THE PROJECT GUTENBERG EBOOK', '***START OF THE PROJECT GUTENBERG EBOOK', '*** START OF THIS PROJECT GUTENBERG EBOOK'];
+    const endMarkers = ['*** END OF THE PROJECT GUTENBERG EBOOK', '***END OF THE PROJECT GUTENBERG EBOOK', '*** END OF THIS PROJECT GUTENBERG EBOOK'];
+    let s = 0;
+    for (const m of startMarkers) {
+      const i = text.indexOf(m);
+      if (i !== -1) { const nl = text.indexOf('\n', i); if (nl !== -1) s = nl + 1; break; }
+    }
+    let e = text.length;
+    for (const m of endMarkers) {
+      const i = text.indexOf(m, s);
+      if (i !== -1) { e = i; break; }
+    }
+    return text.slice(s, e).trim();
+  }
+
+  async function addLitFromGutenberg(book) {
+    const title = book.title || '未命名';
+    const author = (book.authors && book.authors[0] && book.authors[0].name) || '未知作者';
+    toast('正在下载《' + title + '》...', 'info');
+    try {
+      const text = await downloadGutenbergText(book);
+      const doc = {
+        id: litId(),
+        title: title,
+        author: author,
+        source: 'gutenberg',
+        sourceId: String(book.id),
+        wordCount: countWords(text),
+        progress: 0,
+        scrollTop: 0,
+        text: text,
+        createdAt: Date.now()
+      };
+      await saveLitDoc(doc);
+      toast('《' + title + '》已加入听阅');
+      renderLitList();
+    } catch (e) {
+      toast('下载失败：' + (e.message || '未知错误'), 'error');
+    }
+  }
+
+  async function addLitFromPaste(title, text) {
+    if (!title.trim() || !text.trim()) { toast('请输入标题和文本', 'error'); return; }
+    const doc = {
+      id: litId(),
+      title: title.trim(),
+      author: '自定义',
+      source: 'paste',
+      wordCount: countWords(text),
+      progress: 0,
+      scrollTop: 0,
+      text: text.trim(),
+      createdAt: Date.now()
+    };
+    await saveLitDoc(doc);
+    toast('已保存到听阅');
+    renderLitList();
+    $('listenPasteTitle').value = '';
+    $('listenPasteText').value = '';
+  }
+
+  async function addLitFromFile(file) {
+    if (!file) return;
+    const title = file.name.replace(/\.txt$/i, '');
+    const text = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('读取文件失败'));
+      reader.readAsText(file);
+    });
+    if (!text.trim()) { toast('文件内容为空', 'error'); return; }
+    const doc = {
+      id: litId(),
+      title: title,
+      author: '本地文件',
+      source: 'upload',
+      wordCount: countWords(text),
+      progress: 0,
+      scrollTop: 0,
+      text: text.trim(),
+      createdAt: Date.now()
+    };
+    await saveLitDoc(doc);
+    toast('《' + title + '》已导入听阅');
+    renderLitList();
+  }
+
+  function renderLitList() {
+    getAllLitDocs().then(docs => {
+      const list = $('listenList');
+      const empty = $('listenEmpty');
+      if (!docs.length) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
+      empty.classList.add('hidden');
+      docs.sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
+      list.innerHTML = docs.map(d => {
+        const progress = Math.round((d.progress || 0) * 100);
+        return '<div class="reader-card" data-lit-id="' + escapeHtml(d.id) + '">' +
+          '<div class="reader-card-head">' +
+            '<div>' +
+              '<div class="reader-card-title">' + escapeHtml(d.title) + '</div>' +
+              '<div class="reader-card-meta">' + escapeHtml(d.author || '') + (d.wordCount ? ' · ' + d.wordCount.toLocaleString() + ' 词' : '') + '</div>' +
+            '</div>' +
+            '<div class="reader-card-actions">' +
+              '<button class="reader-card-btn danger" data-lit-delete="' + escapeHtml(d.id) + '">删除</button>' +
+              '<button class="reader-card-btn" data-lit-open="' + escapeHtml(d.id) + '">' + (progress > 0 && progress < 100 ? '继续' : '阅读') + '</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="reader-progress">' +
+            '<div class="reader-progress-label"><span>阅读进度</span><span>' + progress + '%</span></div>' +
+            '<div class="reader-progress-track"><div class="reader-progress-fill" style="width:' + progress + '%;"></div></div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+      list.querySelectorAll('[data-lit-open]').forEach(btn => {
+        btn.addEventListener('click', () => openReader(btn.dataset.litOpen));
+      });
+      list.querySelectorAll('[data-lit-delete]').forEach(btn => {
+        btn.addEventListener('click', (e) => { e.stopPropagation(); deleteLit(btn.dataset.litDelete); });
+      });
+    }).catch(() => {});
+  }
+
+  async function deleteLit(id) {
+    openConfirm('确定要删除这篇文献吗？本地阅读进度也会一并删除。', async () => {
+      await deleteLitDoc(id);
+      renderLitList();
+      toast('已删除');
+    });
+  }
+
+  function renderGutenbergResults(books) {
+    const el = $('listenGutenbergResults');
+    if (!books || !books.length) { el.innerHTML = '<div class="reader-empty">未找到相关书籍，换个关键词试试</div>'; return; }
+    el.innerHTML = '<div class="reader-section-title">搜索结果 · Gutenberg</div>' + books.map(b => {
+      const author = (b.authors && b.authors[0] && b.authors[0].name) || '未知作者';
+      const hasText = Object.keys(b.formats || {}).some(k => k.indexOf('text/plain') !== -1);
+      return '<div class="reader-card">' +
+        '<div class="reader-card-head">' +
+          '<div>' +
+            '<div class="reader-card-title">' + escapeHtml(b.title || '未命名') + '</div>' +
+            '<div class="reader-card-meta">' + escapeHtml(author) + ' · ' + (b.download_count || 0).toLocaleString() + ' 次下载</div>' +
+          '</div>' +
+          '<button class="reader-card-btn" data-guten-id="' + escapeHtml(String(b.id)) + '"' + (hasText ? '' : ' disabled') + '>' + (hasText ? '下载' : '无文本') + '</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    el.querySelectorAll('[data-guten-id]').forEach(btn => {
+      if (btn.disabled) return;
+      btn.addEventListener('click', () => {
+        const book = books.find(b => String(b.id) === btn.dataset.gutenId);
+        if (book) addLitFromGutenberg(book);
+      });
+    });
+  }
+
+  function setListenSource(source) {
+    document.querySelectorAll('[data-listen-source]').forEach(btn => btn.classList.toggle('active', btn.dataset.listenSource === source));
+    $('listenGutenbergResults').classList.toggle('hidden', source !== 'gutenberg');
+    $('listenPasteArea').classList.toggle('hidden', source !== 'paste');
+    $('listenUploadArea').classList.toggle('hidden', source !== 'upload');
+    if (source === 'gutenberg') $('listenSearchInput').focus();
+  }
+
+  function splitTextToParagraphs(text) {
+    const paras = String(text).replace(/\r\n/g, '\n').split(/\n{2,}/);
+    return paras.filter(p => p.trim()).map(p => {
+      const html = escapeHtml(p.trim()).split(/\n+/).map(line => {
+        return line.replace(/([a-zA-Z]+)/g, '<span class="word">$1</span>');
+      }).join('<br>');
+      return '<p>' + html + '</p>';
+    }).join('');
+  }
+
+  async function openReader(id) {
+    const doc = await getLitDoc(id);
+    if (!doc) { toast('文献不存在', 'error'); return; }
+    currentLitId = id;
+    currentLitDoc = doc;
+    $('readerTitle').textContent = doc.title;
+    $('readerProgress').textContent = Math.round((doc.progress || 0) * 100) + '%';
+    const body = $('readerBody');
+    body.innerHTML = splitTextToParagraphs(doc.text);
+    const view = $('readerView');
+    view.classList.add('active');
+    requestAnimationFrame(() => {
+      body.scrollTop = doc.scrollTop || 0;
+      updateReaderProgress();
+    });
+  }
+
+  function closeReader() {
+    if (currentLitId) saveReaderProgressNow();
+    $('readerView').classList.remove('active');
+    hideReaderPopup();
+    currentLitId = null;
+    currentLitDoc = null;
+  }
+
+  function updateReaderProgress() {
+    const body = $('readerBody');
+    if (!body || !currentLitDoc) return;
+    const scroll = body.scrollTop;
+    const max = Math.max(1, body.scrollHeight - body.clientHeight);
+    const percent = Math.min(1, Math.max(0, scroll / max));
+    currentLitDoc.progress = percent;
+    currentLitDoc.scrollTop = scroll;
+    $('readerProgress').textContent = Math.round(percent * 100) + '%';
+  }
+
+  function scheduleSaveReaderProgress() {
+    if (readerSaveTimer) clearTimeout(readerSaveTimer);
+    readerSaveTimer = setTimeout(saveReaderProgressNow, 800);
+  }
+
+  async function saveReaderProgressNow() {
+    if (!currentLitId || !currentLitDoc) return;
+    try { await saveLitDoc(currentLitDoc); } catch (e) {}
+  }
+
+  function getWordAtPoint(x, y) {
+    let range = null;
+    if (document.caretPositionFromPoint) {
+      const pos = document.caretPositionFromPoint(x, y);
+      if (pos && pos.offsetNode) {
+        range = document.createRange();
+        range.setStart(pos.offsetNode, Math.min(pos.offset, pos.offsetNode.textContent.length));
+        range.setEnd(pos.offsetNode, Math.min(pos.offset, pos.offsetNode.textContent.length));
+      }
+    } else if (document.caretRangeFromPoint) {
+      range = document.caretRangeFromPoint(x, y);
+    }
+    if (!range) return null;
+    const node = range.startContainer;
+    if (!node || node.nodeType !== 3) return null;
+    const text = node.textContent;
+    let start = range.startOffset, end = range.startOffset;
+    while (start > 0 && /[a-zA-Z]/.test(text[start - 1])) start--;
+    while (end < text.length && /[a-zA-Z]/.test(text[end])) end++;
+    if (end <= start) return null;
+    const word = text.slice(start, end);
+    if (!/^[a-zA-Z]{2,}$/.test(word)) return null;
+    return { word, x, y };
+  }
+
+  async function handleReaderDblclick(e) {
+    const info = getWordAtPoint(e.clientX, e.clientY);
+    if (!info) return;
+    showReaderPopup(info.word, e.clientX, e.clientY);
+  }
+
+  async function showReaderPopup(word, x, y) {
+    const popup = $('readerPopup');
+    const wordEl = $('readerPopupWord');
+    const phoneticEl = $('readerPopupPhonetic');
+    const cnEl = $('readerPopupCn');
+    const defsEl = $('readerPopupDefs');
+    const addBtn = $('readerPopupAdd');
+    wordEl.textContent = word;
+    phoneticEl.textContent = '';
+    cnEl.innerHTML = '';
+    defsEl.innerHTML = '<div class="reader-loading">正在查询...</div>';
+    addBtn.textContent = '+ 加入生词本';
+    addBtn.classList.remove('saved');
+    popup.classList.add('active');
+    positionPopup(x, y);
+
+    const [dict, cn] = await Promise.all([fetchDict(word), translateCn(word)]);
+    const r = buildResult(word, dict, cn);
+    phoneticEl.textContent = r.phonetic || '';
+    cnEl.innerHTML = formatCnDefsHtml(r.cnDefs) || (r.chinese ? '<div style="margin-top:8px;font-size:14px;color:var(--text);">' + escapeHtml(r.chinese) + '</div>' : '');
+    defsEl.innerHTML = r.definitions.map(d =>
+      '<div class="def-item">' + (d.pos ? '<span class="pos">' + escapeHtml(d.pos) + '</span>' : '') + escapeHtml(d.def) + '</div>'
+    ).join('');
+
+    addBtn.onclick = () => {
+      readerSaveToWordBook(r);
+      addBtn.textContent = '✓ 已加入生词本';
+      addBtn.classList.add('saved');
+    };
+    $('readerPopupSpeak').onclick = () => playWord(r.word, r.audioUrl);
+  }
+
+  function positionPopup(x, y) {
+    const popup = $('readerPopup');
+    const rect = popup.getBoundingClientRect();
+    const vw = window.innerWidth, vh = window.innerHeight;
+    let left = x - rect.width / 2;
+    let top = y - rect.height - 12;
+    if (left < 12) left = 12;
+    if (left + rect.width > vw - 12) left = vw - rect.width - 12;
+    if (top < 12) top = y + 24;
+    if (top + rect.height > vh - 12) top = vh - rect.height - 12;
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+  }
+
+  function hideReaderPopup() {
+    $('readerPopup').classList.remove('active');
+  }
+
+  function readerSaveToWordBook(r) {
+    const existing = wordBook.find(w => w.word === r.word);
+    if (existing) {
+      existing.chinese = r.chinese; existing.cnDefs = r.cnDefs; existing.definitions = r.definitions;
+      existing.phonetic = r.phonetic; existing.synonyms = r.synonyms; existing.audioUrl = r.audioUrl;
+      existing.lastSeen = Date.now();
+      if (existing.deletedAt) { delete existing.deletedAt; existing.updatedAt = Date.now(); }
+      save(); renderWordBook();
+      toast('已更新生词本');
+      return;
+    }
+    wordBook.push({
+      word: r.word, phonetic: r.phonetic, chinese: r.chinese, cnDefs: r.cnDefs,
+      definitions: r.definitions, synonyms: r.synonyms, audioUrl: r.audioUrl,
+      addedAt: Date.now(), lastSeen: Date.now(), status: 'new',
+      reviewCount: 0, lastReviewed: null, correctCount: 0
+    });
+    save(); renderWordBook();
+    toast('已加入生词本');
+  }
+
+  function initListenEvents() {
+    $('listenSearchBtn').addEventListener('click', () => {
+      const q = $('listenSearchInput').value.trim();
+      if (!q) { toast('请输入搜索关键词', 'error'); return; }
+      const el = $('listenGutenbergResults');
+      el.innerHTML = '<div class="reader-loading">正在搜索...</div>';
+      searchGutendex(q).then(books => renderGutenbergResults(books)).catch(e => {
+        el.innerHTML = '<div class="reader-empty">搜索失败：' + escapeHtml(e.message || '网络错误') + '</div>';
+      });
+    });
+    $('listenSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('listenSearchBtn').click(); });
+    document.querySelectorAll('[data-listen-source]').forEach(btn => {
+      btn.addEventListener('click', () => setListenSource(btn.dataset.listenSource));
+    });
+    $('listenPasteSaveBtn').addEventListener('click', () => {
+      addLitFromPaste($('listenPasteTitle').value, $('listenPasteText').value);
+    });
+    $('listenUploadBtn').addEventListener('click', () => $('listenFileInput').click());
+    $('listenFileInput').addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) addLitFromFile(f);
+      e.target.value = '';
+    });
+    $('readerBackBtn').addEventListener('click', closeReader);
+    $('readerBody').addEventListener('dblclick', handleReaderDblclick);
+    $('readerBody').addEventListener('scroll', () => { updateReaderProgress(); scheduleSaveReaderProgress(); });
+    $('readerPopupClose').addEventListener('click', hideReaderPopup);
+    $('readerView').addEventListener('click', (e) => {
+      if (e.target.id === 'readerView') hideReaderPopup();
+    });
+  }
+
+
   /* ========== Init ========== */
+  initListenEvents();
   load();
   // 应用切回前台（手机 PWA 从后台挂起恢复、电脑切回标签页）时重新拉取云端，
   // 确保另一台设备的删除/新增能及时同步过来，而不是等到下次冷启动
