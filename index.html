@@ -1690,8 +1690,48 @@ header {
     searchBtn.classList.remove('loading'); searchBtn.textContent = '查 词';
   }
 
+  /* ARPAbet（CMU 发音字典）转标准 IPA */
+  function arpabetToIpa(arpabet) {
+    const map = {
+      'AA0':'ɑ','AA1':'ˈɑ','AA2':'ˌɑ',
+      'AE0':'æ','AE1':'ˈæ','AE2':'ˌæ',
+      'AH0':'ə','AH1':'ˈʌ','AH2':'ˌʌ',
+      'AO0':'ɔ','AO1':'ˈɔ','AO2':'ˌɔ',
+      'AW0':'aʊ','AW1':'ˈaʊ','AW2':'ˌaʊ',
+      'AY0':'aɪ','AY1':'ˈaɪ','AY2':'ˌaɪ',
+      'EH0':'ɛ','EH1':'ˈɛ','EH2':'ˌɛ',
+      'ER0':'ɚ','ER1':'ˈɜ','ER2':'ˌɜ',
+      'EY0':'eɪ','EY1':'ˈeɪ','EY2':'ˌeɪ',
+      'IH0':'ɪ','IH1':'ˈɪ','IH2':'ˌɪ',
+      'IY0':'i','IY1':'ˈi','IY2':'ˌi',
+      'OW0':'oʊ','OW1':'ˈoʊ','OW2':'ˌoʊ',
+      'OY0':'ɔɪ','OY1':'ˈɔɪ','OY2':'ˌɔɪ',
+      'UH0':'ʊ','UH1':'ˈʊ','UH2':'ˌʊ',
+      'UW0':'u','UW1':'ˈu','UW2':'ˌu',
+      'B':'b','CH':'tʃ','D':'d','DH':'ð','F':'f','G':'g','HH':'h','JH':'dʒ',
+      'K':'k','L':'l','M':'m','N':'n','NG':'ŋ','P':'p','R':'r','S':'s','SH':'ʃ',
+      'T':'t','TH':'θ','V':'v','W':'w','Y':'j','Z':'z','ZH':'ʒ'
+    };
+    const tokens = arpabet.trim().split(/\s+/);
+    const ipa = tokens.map(t => map[t] || t.toLowerCase()).join('');
+    return '/' + ipa + '/';
+  }
+
+  /* 从 Wiktionary 获取标准 IPA 音标 */
+  async function fetchWiktionaryIpa(word) {
+    try {
+      const r = await fetchTimeout('https://en.wiktionary.org/w/api.php?action=parse&page=' + encodeURIComponent(word) + '&prop=wikitext&format=json&origin=*', 6000);
+      if (!r.ok) return '';
+      const d = await r.json();
+      const text = d && d.parse && d.parse.wikitext && d.parse.wikitext['*'];
+      if (!text) return '';
+      const m = text.match(/\{\{IPA\|en\|(\/[^/]+\/)/);
+      return m ? m[1] : '';
+    } catch (e) { return ''; }
+  }
+
   /* 词典：Free Dictionary 为主（音标+音频+词性+释义），
-     失败依次回退 Datamuse（WordNet 短释义）、Urban Dictionary（流行词） */
+     失败依次回退 Wiktionary（标准 IPA）、Datamuse（WordNet 短释义 + ARPAbet 转 IPA）、Urban Dictionary（流行词） */
   async function fetchDict(word) {
     try {
       const r = await fetchTimeout('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(word), 8000);
@@ -1712,16 +1752,20 @@ header {
         }
       }
     } catch (e) {}
+    let wiktionaryIpa = '';
+    try {
+      wiktionaryIpa = await fetchWiktionaryIpa(word);
+    } catch (e) {}
     try {
       const r = await fetchTimeout('https://api.datamuse.com/words?sp=' + encodeURIComponent(word) + '&md=rdf&max=3', 6000);
       if (r.ok) {
         const arr = await r.json();
         if (arr && arr.length) {
           const w = arr.find(x => (x.word || '').toLowerCase() === word) || arr[0];
-          let phonetic = '';
+          let phonetic = wiktionaryIpa;
           if (w.tags) {
             const pronTag = w.tags.find(t => typeof t === 'string' && t.indexOf('pron:') === 0);
-            if (pronTag) phonetic = '/' + pronTag.slice(5).trim().replace(/\s+/g, ' ') + '/';
+            if (pronTag) phonetic = arpabetToIpa(pronTag.slice(5).trim());
           }
           const defs = [], syns = [];
           (w.defs || []).forEach(df => {
@@ -1753,7 +1797,7 @@ header {
     return null;
   }
 
-  /* 翻译：Google（dt=bd 结构化多义）与 MyMemory 并行竞争，谁先成功用谁 */
+  /* 翻译：优先 Google（dt=bd 结构化多义），失败 fallback 到 MyMemory */
   function isRealTranslation(t, word) {
     const norm = t.toLowerCase().replace(/[^a-z\u4e00-\u9fa5]/g, '');
     const w = word.toLowerCase().replace(/[^a-z]/g, '');
@@ -1801,31 +1845,25 @@ header {
   }
 
   async function translateCn(word) {
-    const tasks = [
-      (async () => {
-        const r = await fetchTimeout('https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&dt=bd&q=' + encodeURIComponent(word), 5000);
-        if (r.ok) {
-          const d = await r.json();
-          const parsed = parseGoogleCn(d);
-          if (isRealTranslation(parsed.text, word)) return parsed;
-        }
-        throw new Error('fail');
-      })(),
-      (async () => {
-        const r = await fetchTimeout('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(word) + '&langpair=en|zh-CN', 8000);
-        if (r.ok) {
-          const d = await r.json();
-          const t = d.responseData && d.responseData.translatedText;
-          if (t && t.indexOf('MYMEMORY') === -1 && t.indexOf('INVALID') === -1 && isRealTranslation(t, word)) return { text: t.trim(), cnDefs: null };
-        }
-        throw new Error('fail');
-      })()
-    ];
+    // 优先使用 Google 结构化多义翻译（dt=bd 返回按词性分组的中文释义）
     try {
-      return await Promise.any(tasks);
-    } catch (e) {
-      return { text: '', cnDefs: null };
-    }
+      const r = await fetchTimeout('https://translate.google.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&dt=bd&q=' + encodeURIComponent(word), 7000);
+      if (r.ok) {
+        const d = await r.json();
+        const parsed = parseGoogleCn(d);
+        if (isRealTranslation(parsed.text, word)) return parsed;
+      }
+    } catch (e) {}
+    // Google 失败时 fallback 到 MyMemory（仅返回单个翻译文本）
+    try {
+      const r = await fetchTimeout('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(word) + '&langpair=en|zh-CN', 8000);
+      if (r.ok) {
+        const d = await r.json();
+        const t = d.responseData && d.responseData.translatedText;
+        if (t && t.indexOf('MYMEMORY') === -1 && t.indexOf('INVALID') === -1 && isRealTranslation(t, word)) return { text: t.trim(), cnDefs: null };
+      }
+    } catch (e) {}
+    return { text: '', cnDefs: null };
   }
 
   /* 浏览器语音合成兜底（无需网络，发音失败时用） */
