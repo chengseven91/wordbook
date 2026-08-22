@@ -1051,7 +1051,7 @@ header {
 .reader-popup-speak {
   width: 30px; height: 30px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  color: var(--accent); background: var(--accent-soft); margin-left: auto;
+  color: var(--accent); background: var(--accent-soft); margin-left: auto; margin-right: 32px;
   border: none; cursor: pointer;
 }
 .reader-popup-speak svg { width: 16px; height: 16px; }
@@ -1713,11 +1713,16 @@ header {
       }
     } catch (e) {}
     try {
-      const r = await fetchTimeout('https://api.datamuse.com/words?sp=' + encodeURIComponent(word) + '&md=df&max=3', 6000);
+      const r = await fetchTimeout('https://api.datamuse.com/words?sp=' + encodeURIComponent(word) + '&md=rdf&max=3', 6000);
       if (r.ok) {
         const arr = await r.json();
         if (arr && arr.length) {
           const w = arr.find(x => (x.word || '').toLowerCase() === word) || arr[0];
+          let phonetic = '';
+          if (w.tags) {
+            const pronTag = w.tags.find(t => typeof t === 'string' && t.indexOf('pron:') === 0);
+            if (pronTag) phonetic = '/' + pronTag.slice(5).trim().replace(/\s+/g, ' ') + '/';
+          }
           const defs = [], syns = [];
           (w.defs || []).forEach(df => {
             const i = df.indexOf(':');
@@ -1726,7 +1731,7 @@ header {
             if (def) defs.push({ pos: pos, def: def, example: '' });
           });
           if (w.tags) syns.push(...w.tags.filter(t => t.indexOf(' ') === -1).slice(0, 4));
-          if (defs.length) return { phonetic: '', defs: defs, synonyms: syns, audioUrl: '', source: 'datamuse' };
+          if (defs.length) return { phonetic: phonetic, defs: defs, synonyms: syns, audioUrl: '', source: 'datamuse' };
         }
       }
     } catch (e) {}
@@ -4295,7 +4300,7 @@ header {
     wordEl.textContent = word;
     phoneticEl.textContent = '';
     cnEl.innerHTML = '';
-    defsEl.innerHTML = '<div class="reader-loading">正在查询...</div>';
+    defsEl.innerHTML = '';
     addBtn.textContent = '+ 加入生词本';
     addBtn.classList.remove('saved');
     popup.classList.add('active');
@@ -4305,9 +4310,6 @@ header {
     const r = buildResult(word, dict, cn);
     phoneticEl.textContent = r.phonetic || '';
     cnEl.innerHTML = formatCnDefsHtml(r.cnDefs) || (r.chinese ? '<div style="margin-top:8px;font-size:14px;color:var(--text);">' + escapeHtml(r.chinese) + '</div>' : '');
-    defsEl.innerHTML = r.definitions.map(d =>
-      '<div class="def-item">' + (d.pos ? '<span class="pos">' + escapeHtml(d.pos) + '</span>' : '') + escapeHtml(d.def) + '</div>'
-    ).join('');
 
     addBtn.onclick = () => {
       readerSaveToWordBook(r);
