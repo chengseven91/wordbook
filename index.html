@@ -876,6 +876,61 @@ header {
 }
 .reader-search-btn:active { transform: scale(0.97); }
 .reader-results { margin-top: 14px; }
+.reader-catalog { margin-top: 16px; }
+.reader-catalog-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.reader-catalog-sub {
+  font-size: 12px; color: var(--text-3);
+}
+.reader-catalog-scroll {
+  display: flex; gap: 14px; overflow-x: auto;
+  padding: 4px 4px 12px; scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.reader-catalog-scroll::-webkit-scrollbar { height: 4px; }
+.reader-catalog-scroll::-webkit-scrollbar-thumb {
+  background: var(--text-3); border-radius: 2px; opacity: .35;
+}
+.reader-catalog-book {
+  flex: 0 0 auto; width: 112px; scroll-snap-align: start;
+  cursor: pointer; transition: transform .15s;
+}
+.reader-catalog-book:active { transform: scale(0.96); }
+.reader-catalog-cover {
+  width: 112px; height: 160px; border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: var(--shadow);
+  overflow: hidden; margin-bottom: 10px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.reader-catalog-cover img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.reader-cover-placeholder {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--surface-2), var(--surface-3));
+  color: var(--text-3); font-size: 12px; text-align: center;
+  padding: 12px; line-height: 1.4;
+}
+.reader-catalog-title {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; line-height: 1.35; min-height: 35px;
+}
+.reader-catalog-author {
+  font-size: 11px; color: var(--text-3); margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.reader-catalog-loading {
+  font-size: 13px; color: var(--text-3); padding: 20px 0;
+}
+.reader-catalog-disabled {
+  opacity: .45; pointer-events: none;
+}
 .reader-section-title {
   font-size: 13px; font-weight: 600; color: var(--text-3);
   text-transform: uppercase; letter-spacing: 1px;
@@ -1185,6 +1240,16 @@ header {
 
     <div id="listenGutenbergResults" class="reader-results"></div>
 
+    <div class="reader-catalog" id="listenCatalog">
+      <div class="reader-catalog-head">
+        <div class="reader-section-title">精选书单</div>
+        <div class="reader-catalog-sub">点击封面直接阅读</div>
+      </div>
+      <div class="reader-catalog-scroll" id="listenCatalogScroll">
+        <div class="reader-catalog-loading">正在加载书单...</div>
+      </div>
+    </div>
+
     <div class="reader-library">
       <div class="reader-library-head">
         <div class="reader-section-title">我的文献</div>
@@ -1418,7 +1483,7 @@ header {
     if (tab === 'wordbook') renderWordBook();
     if (tab === 'script') renderScriptList();
     if (tab === 'review') { renderReviewStats(); setupReview(); }
-    if (tab === 'listen') renderLitList();
+    if (tab === 'listen') { renderLitList(); loadFeaturedCatalog(); }
     stopVoice();
   }
 
@@ -3806,6 +3871,88 @@ header {
     return (d.results || []).slice(0, 10);
   }
 
+  const FEATURED_BOOK_IDS = [
+    1342,   // Pride and Prejudice
+    11,     // Alice's Adventures in Wonderland
+    64317,  // The Great Gatsby
+    2701,   // Moby Dick
+    74,     // The Adventures of Tom Sawyer
+    345,    // Dracula
+    84,     // Frankenstein
+    174,    // The Picture of Dorian Gray
+    1080,   // A Modest Proposal
+    1400,   // Great Expectations
+    2591,   // Grimm's Fairy Tales
+    1260,   // Jane Eyre
+    6130,   // The Odyssey
+    1661,   // The Adventures of Sherlock Holmes
+    768,    // Wuthering Heights
+    514,    // Little Women
+    145,    // Middlemarch
+    16389,  // The Enchanted April
+    1952,   // The Yellow Wallpaper
+    3207,   // Leviathan
+    3296,   // The Confessions of St. Augustine
+    205,    // Walden
+    2383,   // Discourse on Method
+    19942,  // Flatland: A Romance of Many Dimensions
+  ];
+  let featuredCatalogLoaded = false;
+
+  async function loadFeaturedCatalog() {
+    if (featuredCatalogLoaded) return;
+    const scroll = $('listenCatalogScroll');
+    try {
+      const r = await fetchTimeout('https://gutendex.com/books/?ids=' + FEATURED_BOOK_IDS.join(','), 15000);
+      if (!r.ok) throw new Error('加载失败');
+      const d = await r.json();
+      const books = d.results || [];
+      // Sort by FEATURED_BOOK_IDS order
+      const order = {};
+      FEATURED_BOOK_IDS.forEach((id, i) => order[id] = i);
+      books.sort((a, b) => (order[a.id] || 0) - (order[b.id] || 0));
+      renderCatalogBooks(books);
+      featuredCatalogLoaded = true;
+    } catch (e) {
+      scroll.innerHTML = '<div class="reader-catalog-loading">书单加载失败，请检查网络后重试</div>';
+    }
+  }
+
+  function renderCatalogBooks(books) {
+    const scroll = $('listenCatalogScroll');
+    if (!books.length) {
+      scroll.innerHTML = '<div class="reader-catalog-loading">暂无推荐书籍</div>';
+      return;
+    }
+    scroll.innerHTML = books.map(b => {
+      const author = (b.authors && b.authors[0] && b.authors[0].name) || '未知作者';
+      const coverUrl = (b.formats && b.formats['image/jpeg']) || '';
+      const hasText = Object.keys(b.formats || {}).some(k => k.indexOf('text/plain') !== -1);
+      const cover = coverUrl
+        ? '<img src="' + escapeHtml(coverUrl) + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.parentNode.querySelector(\'.reader-cover-placeholder\').style.display=\'flex\';">' +
+          '<div class="reader-cover-placeholder" style="display:none">' + escapeHtml(truncateText(b.title, 28)) + '</div>'
+        : '<div class="reader-cover-placeholder">' + escapeHtml(truncateText(b.title, 28)) + '</div>';
+      return '<div class="reader-catalog-book' + (hasText ? '' : ' reader-catalog-disabled') + '" data-guten-id="' + escapeHtml(String(b.id)) + '">' +
+        '<div class="reader-catalog-cover">' + cover + '</div>' +
+        '<div class="reader-catalog-title" title="' + escapeHtml(b.title || '未命名') + '">' + escapeHtml(b.title || '未命名') + '</div>' +
+        '<div class="reader-catalog-author" title="' + escapeHtml(author) + '">' + escapeHtml(author) + '</div>' +
+      '</div>';
+    }).join('');
+    scroll.querySelectorAll('.reader-catalog-book[data-guten-id]').forEach(card => {
+      if (card.classList.contains('reader-catalog-disabled')) return;
+      card.addEventListener('click', () => {
+        const id = card.dataset.gutenId;
+        const book = books.find(b => String(b.id) === id);
+        if (book) addLitFromGutenberg(book);
+      });
+    });
+  }
+
+  function truncateText(str, max) {
+    const s = String(str || '');
+    return s.length > max ? s.slice(0, max - 1) + '…' : s;
+  }
+
   async function downloadGutenbergText(book) {
     const formats = book.formats || {};
     const preferred = [
@@ -3994,10 +4141,24 @@ header {
   function setListenSource(source) {
     document.querySelectorAll('[data-listen-source]').forEach(btn => btn.classList.toggle('active', btn.dataset.listenSource === source));
     $('listenSearchBox').classList.toggle('hidden', source !== 'gutenberg');
-    $('listenGutenbergResults').classList.toggle('hidden', source !== 'gutenberg');
+    const isGutenberg = source === 'gutenberg';
+    $('listenGutenbergResults').classList.toggle('hidden', !isGutenberg);
     $('listenPasteArea').classList.toggle('hidden', source !== 'paste');
     $('listenUploadArea').classList.toggle('hidden', source !== 'upload');
-    if (source === 'gutenberg') $('listenSearchInput').focus();
+    if (isGutenberg) {
+      $('listenSearchInput').focus();
+      showListenCatalog();
+      loadFeaturedCatalog();
+    } else {
+      hideListenCatalog();
+    }
+  }
+
+  function showListenCatalog() {
+    $('listenCatalog').classList.remove('hidden');
+  }
+  function hideListenCatalog() {
+    $('listenCatalog').classList.add('hidden');
   }
 
   function splitTextToParagraphs(text) {
@@ -4161,7 +4322,12 @@ header {
   function initListenEvents() {
     $('listenSearchBtn').addEventListener('click', () => {
       const q = $('listenSearchInput').value.trim();
-      if (!q) { toast('请输入搜索关键词', 'error'); return; }
+      if (!q) {
+        $('listenGutenbergResults').innerHTML = '';
+        showListenCatalog();
+        return;
+      }
+      hideListenCatalog();
       const el = $('listenGutenbergResults');
       el.innerHTML = '<div class="reader-loading">正在搜索...</div>';
       searchGutendex(q).then(books => renderGutenbergResults(books)).catch(e => {
