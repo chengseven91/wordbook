@@ -1,28 +1,19 @@
-const CACHE_NAME = 'shengciben-v47';
+const CACHE_NAME = 'shengciben-v51';
 const CORE_ASSETS = [
   './',
   './index.html',
-  './manifest.json'
-];
-const CDN_ASSETS = [
-  'https://cdnjs.cloudflare.com/ajax/libs/epubjs/0.3.93/epub.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+  './manifest.json',
+  './libs/jszip.min.js',
+  './libs/epub.min.js',
+  './libs/pdf.min.js',
+  './libs/pdf.worker.min.js'
 ];
 
-// Install: cache core assets + CDN scripts
+// Install: cache core assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(CORE_ASSETS))
-      .then(() => {
-        // Pre-cache CDN scripts (best-effort, don't fail install if unavailable)
-        return Promise.allSettled(CDN_ASSETS.map(url =>
-          fetch(url, { mode: 'cors' }).then(r => {
-            if (r.ok) return caches.open(CACHE_NAME).then(c => c.put(url, r));
-          }).catch(() => {})
-        ));
-      })
       .then(() => self.skipWaiting())
   );
 });
@@ -47,26 +38,6 @@ self.addEventListener('message', (event) => {
 // Fetch: index.html 走 network-first（保证每次都拿到最新版），其余静态资源 cache-first
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-
-  // Only handle same-origin requests (API calls go through network)
-  // Exception: cache CDN scripts (epub.js, pdf.js) for offline use
-  if (url.origin !== self.location.origin) {
-    if (url.hostname === 'cdnjs.cloudflare.com') {
-      event.respondWith(
-        caches.match(event.request).then((cached) => {
-          if (cached) return cached;
-          return fetch(event.request).then((response) => {
-            if (response.ok && event.request.method === 'GET') {
-              const clone = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-            }
-            return response;
-          }).catch(() => new Response('', { status: 504, statusText: 'Offline' }));
-        })
-      );
-    }
-    return;
-  }
 
   // For API requests, always go to network
   if (url.hostname.includes('api.') || url.hostname.includes('translate.')) return;
