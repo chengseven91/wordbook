@@ -282,6 +282,14 @@ header {
 .reader-popup-defs .pos-def-item { font-size: 13.5px; margin-bottom: 7px; }
 .reader-popup-defs .pos-def-cn { font-size: 12.5px; }
 .reader-popup-defs .pos-def-example { font-size: 12px; }
+.pos-def-item-loading { opacity: 0.85; }
+.pos-def-item-loading::after {
+  content: ' …译';
+  font-size: 11px;
+  color: var(--text-2, #888);
+  font-style: italic;
+  margin-left: 4px;
+}
 /* Tok sheet enhanced defs */
 .tok-trans-defs .pos-group { margin-bottom: 10px; }
 .tok-trans-defs .pos-group-header { font-size: 12px; padding: 2px 8px; margin-bottom: 5px; }
@@ -2009,15 +2017,106 @@ header {
     return null;
   }
 
+  /* 从 jina 等代理返回的混合文本中提取 Google Translate JSON */
+  function extractGoogleJson(text) {
+    const start = String(text).indexOf('[[[');
+    if (start === -1) return null;
+    let depth = 0, inString = false, escape = false, i = start;
+    for (; i < text.length; i++) {
+      const c = text[i];
+      if (inString) {
+        if (escape) { escape = false; continue; }
+        if (c === '\\') { escape = true; continue; }
+        if (c === '"') inString = false;
+        continue;
+      }
+      if (c === '"') { inString = true; continue; }
+      if (c === '[') depth++;
+      if (c === ']') {
+        depth--;
+        if (depth === 0) { i++; break; }
+      }
+    }
+    try { return JSON.parse(text.slice(start, i)); } catch (e) { return null; }
+  }
+
+  /* 批量英译中：Google 多 q / jina 代理 / MyMemory 兜底 */
+  async function translateBatchEnToZh(items) {
+    if (!Array.isArray(items) || !items.length) return [];
+    const texts = items.map(it => String(it || '').slice(0, 480));
+    const parse = (data) => {
+      const list = Array.isArray(data) ? data[0] : null;
+      if (!Array.isArray(list)) return [];
+      return list.map(arr => Array.isArray(arr) ? (arr[0] || '').replace(/&#39;/g, "'").trim() : '');
+    };
+
+    try {
+      const params = new URLSearchParams();
+      params.set('client', 'gtx'); params.set('sl', 'en'); params.set('tl', 'zh-CN'); params.set('dt', 't');
+      texts.forEach(it => params.append('q', it));
+      const r = await fetchTimeout('https://translate.googleapis.com/translate_a/single?' + params.toString(), 8000);
+      if (r.ok) {
+        const out = parse(await r.json());
+        if (out.length) return out;
+      }
+    } catch (e) {}
+
+    try {
+      const params = new URLSearchParams();
+      params.set('client', 'gtx'); params.set('sl', 'en'); params.set('tl', 'zh-CN'); params.set('dt', 't');
+      texts.forEach(it => params.append('q', it));
+      const r = await fetchTimeout('https://r.jina.ai/https://translate.googleapis.com/translate_a/single?' + params.toString(), 12000);
+      if (r.ok) {
+        const data = extractGoogleJson(await r.text());
+        const out = parse(data);
+        if (out.length) return out;
+      }
+    } catch (e) {}
+
+    const out = [];
+    for (const q of texts) {
+      try {
+        const r = await fetchTimeout('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(q) + '&langpair=en|zh-CN', 6000);
+        if (!r.ok) { out.push(''); continue; }
+        const d = await r.json();
+        const t = d.responseData && d.responseData.translatedText;
+        out.push((t && t.indexOf('MYMEMORY') === -1 && t.indexOf('INVALID') === -1) ? t.trim() : '');
+      } catch (e) { out.push(''); }
+    }
+    return out;
+  }
+
+  /* 给尚未带中文的每条释义异步补充中文翻译（直接展示在英文下面） */
+  async function enrichPerDefCn(rootEl) {
+    const root = rootEl || document.querySelector('.def-section');
+    if (!root) return;
+    const items = Array.from(root.querySelectorAll('.pos-def-item')).filter(el => !el.querySelector('.pos-def-cn'));
+    if (!items.length) return;
+    const texts = items.map(el => {
+      const first = el.firstChild;
+      return (first && first.nodeType === 3 ? first.textContent : (el.textContent || '')).split('\n')[0].trim();
+    }).filter(Boolean);
+    if (!texts.length) return;
+    items.forEach(el => { el.classList.add('pos-def-item-loading'); });
+    const cn = await translateBatchEnToZh(texts);
+    items.forEach((el, i) => {
+      el.classList.remove('pos-def-item-loading');
+      const text = cn[i];
+      if (!text) return;
+      const div = document.createElement('div');
+      div.className = 'pos-def-cn';
+      div.textContent = text;
+      el.appendChild(div);
+    });
+  }
+
   /* Google 结构化翻译：经 r.jina.ai 代理（国内可达，绕过 Google 被墙） */
   async function fetchGoogleViaJina(word) {
     try {
       const r = await fetchTimeout('https://r.jina.ai/https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&dt=bd&q=' + encodeURIComponent(word), 10000);
       if (r.ok) {
-        const t = await r.text();
-        const i = t.indexOf('[[[');
-        if (i === -1) return null;
-        const d = JSON.parse(t.slice(i));
+        const d = extractGoogleJson(await r.text());
+        if (!d) return null;
         const parsed = parseGoogleCn(d);
         if (isRealTranslation(parsed.text, word) || parsed.cnDefs) return parsed;
       }
@@ -2201,6 +2300,8 @@ header {
     const pa = $('playAudio');
     if (pa) pa.addEventListener('click', () => { playWord(r.word, r.audioUrl); });
     $('editCnBtn').addEventListener('click', () => openEdit(r.word, r.chinese));
+    /* 每条英文释义下面异步补充中文（仅在没有 cnByPos 命中时需要） */
+    enrichPerDefCn(searchResult);
   }
 
   function autoSave(r) {
@@ -4898,6 +4999,7 @@ header {
       phoneticEl.textContent = r.phonetic || '';
       cnEl.innerHTML = formatCnDefsHtml(r.cnDefs) || (r.chinese && r.chinese.indexOf('未获取') === -1 ? '<div style="margin-top:8px;font-size:14px;color:var(--text);">' + escapeHtml(r.chinese) + '</div>' : (cnEl.innerHTML || ''));
       defsEl.innerHTML = renderDefsHtml(r.groupedDefs || [], r.cnDefs);
+      enrichPerDefCn(defsEl);
       positionPopup(x, y);
     }
 
