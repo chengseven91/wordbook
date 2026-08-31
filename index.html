@@ -2668,6 +2668,24 @@ header {
     if (!d || !d.id) throw new Error('GitHub 返回异常');
     return d.id;
   }
+  async function gistFindExisting(apiKey) {
+    // 同一 GitHub 账号下如果已有同步 Gist，直接复用，避免用户在第二台设备又粘贴 token 时创建出新的孤立空间
+    try {
+      const res = await fetchTimeout('https://api.github.com/gists?per_page=100&t=' + Date.now(), 25000, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { 'Authorization': 'token ' + apiKey, 'Accept': 'application/vnd.github.v3+json' }
+      });
+      if (!res.ok) return null;
+      const gists = await res.json();
+      if (!Array.isArray(gists)) return null;
+      for (const g of gists) {
+        if (g.files && g.files[GIST_FILE]) return g.id;
+        if (g.description === "Sloane's Translation App Sync") return g.id;
+      }
+    } catch (e) {}
+    return null;
+  }
   async function gistFetch(attempt) {
     // GitHub 对 GET /gists/{id} 有 60 秒 CDN 缓存 + 浏览器/代理也会缓存：
     // 电脑刚上传、手机立刻同步时会读到旧数据，甚至旧数据反向覆盖新数据。
@@ -2973,7 +2991,19 @@ header {
     cloudState = { provider: provider, apiKey: v, binId: null, localUpdatedAt: Date.now(), lastSync: Date.now() };
     let binId;
     try {
-      binId = provider === 'github' ? await gistCreate(v) : await jsonbinCreate(v);
+      if (provider === 'github') {
+        // GitHub：先尝试复用该账号下已有的同步 Gist，防止多台设备各自新建导致数据分裂
+        binId = await gistFindExisting(v);
+        if (binId) {
+          cloudState.binId = binId;
+          saveCloudState();
+          await syncNow(true);
+          return 'sync';
+        }
+        binId = await gistCreate(v);
+      } else {
+        binId = await jsonbinCreate(v);
+      }
     } catch (e) {
       cloudState = null;   // 创建失败不留残留状态
       throw e;
