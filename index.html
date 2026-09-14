@@ -1667,7 +1667,209 @@ header {
     voiceTip.classList.remove('listening');
   }
 
+  /* ========== 离线词库（ECDICT 精简 2 万常用词，按首字母分片按需加载） ========== */
+  const LOCAL_DICT_BASE = './dict/';
+  const localShards = {};
+  const localShardTasks = {};
+  let dictDBPromise = null;
+
+  function openDictDB() {
+    if (dictDBPromise) return dictDBPromise;
+    dictDBPromise = new Promise(resolve => {
+      try {
+        if (!window.indexedDB) { resolve(null); return; }
+        const req = indexedDB.open('shengciben-dict-cache', 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('store')) db.createObjectStore('store');
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      } catch (e) { resolve(null); }
+    });
+    return dictDBPromise;
+  }
+
+  async function dictCacheGet(key) {
+    const db = await openDictDB();
+    if (!db) return null;
+    return new Promise(resolve => {
+      try {
+        const r = db.transaction('store', 'readonly').objectStore('store').get(key);
+        r.onsuccess = () => resolve(r.result === undefined ? null : r.result);
+        r.onerror = () => resolve(null);
+      } catch (e) { resolve(null); }
+    });
+  }
+
+  async function dictCachePut(key, val) {
+    const db = await openDictDB();
+    if (!db) return;
+    try { db.transaction('store', 'readwrite').objectStore('store').put(val, key); } catch (e) {}
+  }
+
+  /* 词形还原候选：复数 / 过去式 / 进行时 / 比较级等 */
+  function lemmaCandidates(w) {
+    const out = [];
+    const push = s => { if (s && s.length > 1 && out.indexOf(s) === -1) out.push(s); };
+    if (/ies$/.test(w)) push(w.slice(0, -3) + 'y');
+    if (/ied$/.test(w)) push(w.slice(0, -3) + 'y');
+    if (/es$/.test(w)) push(w.slice(0, -2));
+    if (/s$/.test(w)) push(w.slice(0, -1));
+    if (/ed$/.test(w)) { push(w.slice(0, -2)); push(w.slice(0, -1)); }
+    if (/ing$/.test(w)) {
+      const b = w.slice(0, -3);
+      push(b); push(b + 'e');
+      if (/([b-df-hj-np-tv-z])\1$/.test(b)) push(b.slice(0, -1));
+    }
+    if (/er$/.test(w)) { push(w.slice(0, -2)); push(w.slice(0, -1)); }
+    if (/est$/.test(w)) { push(w.slice(0, -3)); push(w.slice(0, -2)); }
+    if (/ly$/.test(w)) push(w.slice(0, -2));
+    return out;
+  }
+
+  function cleanLookupKey(word) {
+    return String(word || '').toLowerCase().replace(/^[^a-z]+/, '').replace(/[^a-z'\-]+$/, '').trim();
+  }
+
+  function shardKeyOf(word) {
+    const c = word.charAt(0);
+    return /[a-z]/.test(c) ? c : '_';
+  }
+
+  function loadLocalShard(letter) {
+    if (localShards[letter]) return Promise.resolve(localShards[letter]);
+    if (localShardTasks[letter]) return localShardTasks[letter];
+    const task = (async () => {
+      const cached = await dictCacheGet('shard:' + letter);
+      if (cached) { localShards[letter] = cached; return cached; }
+      const r = await fetchTimeout(LOCAL_DICT_BASE + 'dict-' + letter + '.json', 8000);
+      if (!r.ok) throw new Error('shard missing');
+      const map = await r.json();
+      localShards[letter] = map;
+      dictCachePut('shard:' + letter, map);
+      return map;
+    })().catch(() => { delete localShardTasks[letter]; return null; });
+    localShardTasks[letter] = task;
+    return task;
+  }
+
+  async function lookupLocalDict(word) {
+    const key = cleanLookupKey(word);
+    if (!key) return null;
+    const shard = await loadLocalShard(shardKeyOf(key));
+    if (!shard) return null;
+    if (shard[key]) return { entry: shard[key], matched: key };
+    const cands = lemmaCandidates(key);
+    for (let i = 0; i < cands.length; i++) {
+      if (shard[cands[i]]) return { entry: shard[cands[i]], matched: cands[i] };
+    }
+    return null;
+  }
+
+  function normalizeIpa(p) {
+    if (!p) return '';
+    let s = String(p).trim();
+    s = s.replace(/ә/g, 'ə').replace(/ɡ/g, 'g').replace(/'/g, 'ˈ');
+    if (s.charAt(0) !== '/') s = '/' + s;
+    if (s.charAt(s.length - 1) !== '/') s = s + '/';
+    return s;
+  }
+
+  const CN_TAG_RE = /^\[[^\]]{1,8}\]/;
+  const POS_PREFIX_RE = /^(n|v|vt|vi|adj|adv|a|s|prep|conj|pron|int|interj|num|art|aux|abbr|suf|pref|det)\.\s*(.+)$/i;
+  const EN_POS_PREFIX_RE = /^(n|v|a|s|r|j|adv|adj|prep|conj|pron|int|interj|num|aux|art|vt|vi)\.\s+(.+)$/i;
+
+  function splitCnItems(s) {
+    return String(s || '').split(/[,，;；、]/).map(x => x.trim()).filter(Boolean);
+  }
+
+  /* ECDICT 的多释义用「字面量 \n」分隔（反斜杠 + n 两个字符），此处兼容真实换行 */
+  function splitDictLines(s) {
+    return String(s || '').split(/\\n|\r\n|\r|\n/).map(x => x.trim()).filter(Boolean);
+  }
+
+  /* ECDICT 条目 → 应用内部结构 { dict, cn } */
+  function shapeLocalEntry(matched, entry) {
+    if (!entry) return null;
+    const phonetic = normalizeIpa(entry[0] || '');
+    const cnLines = splitDictLines(entry[1] || '');
+    const enLines = splitDictLines(entry[2] || '');
+
+    const cnGroups = {}, cnOrder = [], cnExtra = [];
+    cnLines.forEach(line => {
+      const m = line.match(POS_PREFIX_RE);
+      if (m) {
+        const pos = normalizePos(m[1]) || 'other';
+        if (!cnGroups[pos]) { cnGroups[pos] = []; cnOrder.push(pos); }
+        splitCnItems(m[2]).forEach(x => { if (cnGroups[pos].length < 12) cnGroups[pos].push(x); });
+      } else {
+        const body = line.replace(CN_TAG_RE, '').trim();
+        if (body) cnExtra.push(body);
+      }
+    });
+
+    const defs = [];
+    enLines.forEach(line => {
+      const m = line.match(EN_POS_PREFIX_RE);
+      let pos = '', def = line;
+      if (m) { pos = normalizePos(m[1]); def = m[2].trim(); }
+      if (def && defs.length < 30) defs.push({ pos: pos, def: def, example: '' });
+    });
+
+    let cnDefs = cnOrder.map(pos => ({ pos: pos, trans: cnGroups[pos] }));
+    if (cnExtra.length) cnDefs.push({ pos: '', trans: cnExtra.slice(0, 6) });
+
+    /* 无英文释义时，用中文释义按词性分组展示，避免出现"暂无释义"占位 */
+    if (!defs.length && cnOrder.length) {
+      cnOrder.forEach(pos => defs.push({ pos: pos, def: cnGroups[pos].join('，'), example: '' }));
+      cnDefs = [];
+    }
+
+    const cnSummary = cnLines.map(l => l.replace(CN_TAG_RE, '').trim()).filter(Boolean).join('；');
+
+    return {
+      dict: { phonetic: phonetic, audioUrl: '', synonyms: [], defs: defs, source: 'local' },
+      cn: { text: cnSummary, cnDefs: cnDefs.length ? cnDefs : null },
+      matched: matched
+    };
+  }
+
   /* ========== 查词 ========== */
+
+  /* 查词主流程：本地词库优先（近乎瞬时），未命中才走网络；网络结果谁先到先渲染 */
+  async function queryWordSmart(word, onPartial) {
+    const key = cleanLookupKey(word);
+    if (key) {
+      const cached = await dictCacheGet('w:' + key);
+      if (cached) return { result: cached, local: true, cached: true };
+      try {
+        const local = await lookupLocalDict(key);
+        if (local) {
+          const shaped = shapeLocalEntry(local.matched, local.entry);
+          if (shaped) {
+            const r = buildResult(word, shaped.dict, shaped.cn);
+            r.dictSource = 'local';
+            r.matchedWord = local.matched;
+            dictCachePut('w:' + key, r);
+            return { result: r, local: true };
+          }
+        }
+      } catch (e) {}
+    }
+    let dict = null, cn = null, fired = false;
+    const fire = () => {
+      if (fired || (!dict && !cn)) return;
+      fired = true;
+      if (onPartial) { try { onPartial(buildResult(word, dict, cn)); } catch (e) {} }
+    };
+    const dictP = fetchDict(word).then(v => { dict = v; fire(); return v; }).catch(() => { fire(); return null; });
+    const cnP = translateCn(word).then(v => { cn = v; fire(); return v; }).catch(() => { fire(); return null; });
+    await Promise.race([dictP, cnP]);
+    await Promise.all([dictP, cnP]);
+    if (!dict && !cn) return { result: null, local: false };
+    return { result: buildResult(word, dict, cn), local: false };
+  }
   searchBtn.addEventListener('click', doSearch);
   searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
   searchInput.addEventListener('input', () => {
@@ -1773,18 +1975,21 @@ header {
     searchResult.innerHTML = '<div class="loading-wrap"><div class="spinner"></div><div>正在查询「' + escapeHtml(word) + '」...</div></div>';
     searchBtn.classList.add('loading'); searchBtn.textContent = '查询中';
 
-    let dict = null, cn = null;
+    let res = null;
     try {
-      const results = await Promise.all([fetchDict(word), translateCn(word)]);
-      dict = results[0]; cn = results[1];
+      res = await queryWordSmart(word, partial => {
+        /* 网络源谁先返回就先渲染谁，不等全部完成 */
+        currentResult = partial;
+        renderResult(partial);
+      });
     } catch (e) {}
-    if (!dict && !cn) {
+    if (!res || !res.result) {
       searchResult.innerHTML =
         '<div class="error-wrap"><div class="err-icon">🔍</div><h3>没有查询到「' + escapeHtml(word) + '」的结果</h3>' +
         '<p>可能是生僻词或拼写有误<br>也可能是网络/词典服务暂时不可用</p>' +
         '<p class="err-hint">提示：查词用的是免费词典接口，无需任何模型或配置。若确认拼写无误，可切换网络（如手机流量）再试</p></div>';
     } else {
-      currentResult = buildResult(word, dict, cn);
+      currentResult = res.result;
       renderResult(currentResult);
       autoSave(currentResult);
     }
@@ -1851,7 +2056,7 @@ header {
      都失败再回退 Urban Dictionary。国内网络下 Datamuse 直连可达，秒级出结果 */
   async function fetchFreeDict(word) {
     try {
-      const r = await fetchTimeout('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(word), 8000);
+      const r = await fetchTimeout('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(word), 5000);
       if (r.ok) {
         const arr = await r.json();
         if (arr && arr[0]) {
@@ -1875,7 +2080,7 @@ header {
   async function fetchDatamuseDict(word) {
     const ipaP = fetchWiktionaryIpa(word).catch(() => '');
     try {
-      const r = await fetchTimeout('https://api.datamuse.com/words?sp=' + encodeURIComponent(word) + '&md=rdf&max=10', 7000);
+      const r = await fetchTimeout('https://api.datamuse.com/words?sp=' + encodeURIComponent(word) + '&md=rdf&max=10', 5000);
       if (r.ok) {
         const arr = await r.json();
         if (arr && arr.length) {
@@ -1984,9 +2189,9 @@ header {
     return { text, cnDefs };
   }
 
-  const POS_ABBR = { noun: 'n.', verb: 'v.', adjective: 'adj.', adverb: 'adv.', preposition: 'prep.', conjunction: 'conj.', pronoun: 'pron.', interjection: 'int.', determiner: 'det.', article: 'art.', auxiliary: 'aux.', modal: 'modal.' };
+  const POS_ABBR = { noun: 'n.', verb: 'v.', adjective: 'adj.', adverb: 'adv.', preposition: 'prep.', conjunction: 'conj.', pronoun: 'pron.', interjection: 'int.', determiner: 'det.', article: 'art.', auxiliary: 'aux.', modal: 'modal.', numeral: 'num.', suffix: 'suf.', prefix: 'pref.', abbreviation: 'abbr.' };
   /* Normalize POS from different sources: 'v' → 'verb', 'n' → 'noun', 'adj' → 'adjective', etc. */
-  const POS_NORMALIZE = { 'v':'verb','v.':'verb','vb':'verb','verb.':'verb','n':'noun','n.':'noun','nn':'noun','adj':'adjective','adj.':'adjective','a':'adjective','adv':'adverb','adv.':'adverb','r':'adverb','prep':'preposition','prep.':'preposition','conj':'conjunction','conj.':'conjunction','pron':'pronoun','pron.':'pronoun','int':'interjection','int.':'interjection','det':'determiner','det.':'determiner','art':'article','art.':'article' };
+  const POS_NORMALIZE = { 'v':'verb','v.':'verb','vb':'verb','verb.':'verb','vi':'verb','vt':'verb','n':'noun','n.':'noun','nn':'noun','adj':'adjective','adj.':'adjective','a':'adjective','a.':'adjective','s':'adjective','s.':'adjective','j':'adjective','adv':'adverb','adv.':'adverb','r':'adverb','r.':'adverb','prep':'preposition','prep.':'preposition','conj':'conjunction','conj.':'conjunction','pron':'pronoun','pron.':'pronoun','int':'interjection','int.':'interjection','interj':'interjection','det':'determiner','det.':'determiner','art':'article','art.':'article','num':'numeral','suf':'suffix','pref':'prefix','abbr':'abbreviation' };
   function normalizePos(pos) {
     if (!pos) return '';
     const key = pos.toLowerCase().replace(/\.$/, '').trim();
@@ -2006,7 +2211,7 @@ header {
   /* Google 结构化翻译：直连（海外网络快） */
   async function fetchGoogleDirect(word) {
     try {
-      const r = await fetchTimeout('https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&dt=bd&q=' + encodeURIComponent(word), 6000);
+      const r = await fetchTimeout('https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&dt=bd&q=' + encodeURIComponent(word), 5000);
       if (r.ok) {
         const d = await r.json();
         const parsed = parseGoogleCn(d);
@@ -2053,7 +2258,7 @@ header {
       const params = new URLSearchParams();
       params.set('client', 'gtx'); params.set('sl', 'en'); params.set('tl', 'zh-CN'); params.set('dt', 't');
       texts.forEach(it => params.append('q', it));
-      const r = await fetchTimeout('https://translate.googleapis.com/translate_a/single?' + params.toString(), 8000);
+      const r = await fetchTimeout('https://translate.googleapis.com/translate_a/single?' + params.toString(), 5000);
       if (r.ok) {
         const out = parse(await r.json());
         if (out.length) return out;
@@ -2064,7 +2269,7 @@ header {
       const params = new URLSearchParams();
       params.set('client', 'gtx'); params.set('sl', 'en'); params.set('tl', 'zh-CN'); params.set('dt', 't');
       texts.forEach(it => params.append('q', it));
-      const r = await fetchTimeout('https://r.jina.ai/https://translate.googleapis.com/translate_a/single?' + params.toString(), 12000);
+      const r = await fetchTimeout('https://r.jina.ai/https://translate.googleapis.com/translate_a/single?' + params.toString(), 6000);
       if (r.ok) {
         const data = extractGoogleJson(await r.text());
         const out = parse(data);
@@ -2072,16 +2277,23 @@ header {
       }
     } catch (e) {}
 
-    const out = [];
-    for (const q of texts) {
-      try {
-        const r = await fetchTimeout('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(q) + '&langpair=en|zh-CN', 6000);
-        if (!r.ok) { out.push(''); continue; }
-        const d = await r.json();
-        const t = d.responseData && d.responseData.translatedText;
-        out.push((t && t.indexOf('MYMEMORY') === -1 && t.indexOf('INVALID') === -1) ? t.trim() : '');
-      } catch (e) { out.push(''); }
-    }
+    /* MyMemory 兜底：改为并发（原为逐条串行，9 条释义要等十几秒） */
+    const out = new Array(texts.length).fill('');
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < texts.length) {
+        const i = cursor++;
+        const q = texts[i];
+        try {
+          const r = await fetchTimeout('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(q) + '&langpair=en|zh-CN', 5000);
+          if (!r.ok) continue;
+          const d = await r.json();
+          const t = d.responseData && d.responseData.translatedText;
+          if (t && t.indexOf('MYMEMORY') === -1 && t.indexOf('INVALID') === -1) out[i] = t.trim();
+        } catch (e) {}
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(6, texts.length) }, worker));
     return out;
   }
 
@@ -2112,7 +2324,7 @@ header {
   /* Google 结构化翻译：经 r.jina.ai 代理（国内可达，绕过 Google 被墙） */
   async function fetchGoogleViaJina(word) {
     try {
-      const r = await fetchTimeout('https://r.jina.ai/https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&dt=bd&q=' + encodeURIComponent(word), 10000);
+      const r = await fetchTimeout('https://r.jina.ai/https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&dt=bd&q=' + encodeURIComponent(word), 7000);
       if (r.ok) {
         const d = extractGoogleJson(await r.text());
         if (!d) return null;
@@ -2126,7 +2338,7 @@ header {
   /* MyMemory 直连兜底（国内外均可达，但只有单个翻译） */
   async function fetchMyMemory(word) {
     try {
-      const r = await fetchTimeout('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(word) + '&langpair=en|zh-CN', 7000);
+      const r = await fetchTimeout('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(word) + '&langpair=en|zh-CN', 5000);
       if (r.ok) {
         const d = await r.json();
         const t = d.responseData && d.responseData.translatedText;
@@ -2140,7 +2352,7 @@ header {
      优先采用带词性分组的结构化结果（cnDefs），等不到再用单条文本兜底 */
   async function translateCn(word) {
     const structuredP = firstSuccess([fetchGoogleDirect(word), fetchGoogleViaJina(word)]);
-    const timeoutP = sleep(11000).then(() => null);
+    const timeoutP = sleep(6000).then(() => null);
     const structured = await Promise.race([structuredP, timeoutP]);
     if (structured && (structured.cnDefs || structured.text)) return structured;
     const plain = await fetchMyMemory(word);
@@ -3831,8 +4043,12 @@ header {
     body.innerHTML = '<div class="tok-trans-loading"><div class="spinner"></div><div>正在查询「' + escapeHtml(word) + '」...</div></div>';
     let dict = null, cn = null;
     try {
-      const res = await Promise.all([fetchDict(word), translateCn(word)]);
-      dict = res[0]; cn = res[1];
+      const qres = await queryWordSmart(word);
+      if (qres && qres.result) {
+        const rr = qres.result;
+        dict = { phonetic: rr.phonetic, defs: rr.definitions || [], synonyms: rr.synonyms || [], source: rr.dictSource };
+        cn = rr.chinese || '';
+      }
     } catch (e) {}
     if (seq !== tokTranslateSeq) return; // 已点开别的词，丢弃过期结果
     if (!dict && !cn) {
@@ -5009,8 +5225,28 @@ header {
     };
     $('readerPopupSpeak').onclick = () => playWord(r.word, r.audioUrl);
 
-    fetchDict(word).then(d => { if (d) { dict = d; updatePopup(); } }).catch(() => {});
-    translateCn(word).then(t => { cn = t; updatePopup(); }).catch(() => {});
+    /* 本地词库/缓存优先：命中即秒出，不发任何网络请求 */
+    (async () => {
+      try {
+        const key = cleanLookupKey(word);
+        if (key) {
+          const cached = await dictCacheGet('w:' + key);
+          if (cached) {
+            dict = { phonetic: cached.phonetic, defs: cached.definitions || [], synonyms: cached.synonyms || [] };
+            cn = { text: cached.chinese || '', cnDefs: cached.cnDefs || null };
+            updatePopup();
+            return;
+          }
+          const local = await lookupLocalDict(key);
+          if (local) {
+            const shaped = shapeLocalEntry(local.matched, local.entry);
+            if (shaped) { dict = shaped.dict; cn = shaped.cn; updatePopup(); return; }
+          }
+        }
+      } catch (e) {}
+      fetchDict(word).then(d => { if (d) { dict = d; updatePopup(); } }).catch(() => {});
+      translateCn(word).then(t => { cn = t; updatePopup(); }).catch(() => {});
+    })();
   }
 
   function positionPopup(x, y) {
