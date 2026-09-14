@@ -1,8 +1,11 @@
-const CACHE_NAME = 'shengciben-v53';
+const CACHE_NAME = 'shengciben-v54';
 const CORE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+  './apple-touch-icon.png',
   './libs/jszip.min.js',
   './libs/epub.min.js',
   './libs/pdf.min.js',
