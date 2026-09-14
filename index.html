@@ -1178,7 +1178,7 @@ header {
     <div class="header-row">
       <div class="brand">
         <img class="brand-mark" src="icon-192.png" alt="Sloane's">
-        <div class="brand-name">Sloane's</div>
+        <div class="brand-name">Sloane's <span class="ver-badge" id="verBadge"></span></div>
       </div>
       <div style="display:flex;gap:8px;">
         <button class="header-btn" id="exportBtn" title="导出数据" aria-label="导出数据">
@@ -1668,6 +1668,8 @@ header {
   }
 
   /* ========== 离线词库（ECDICT 精简 2 万常用词，按首字母分片按需加载） ========== */
+  const APP_VERSION = 'v57';
+  try { const vb = document.getElementById('verBadge'); if (vb) vb.textContent = APP_VERSION; } catch (e) {}
   const LOCAL_DICT_BASE = './dict/';
   const localShards = {};
   const localShardTasks = {};
@@ -1936,7 +1938,10 @@ header {
     return t.replace(/[^a-z'-]/g, '');
   }
 
+  let searchSeq = 0;
   async function doSearch() {
+    const seq = ++searchSeq;
+    const stale = () => seq !== searchSeq;
     const raw = searchInput.value.trim();
     if (!raw) { toast('请输入单词或中文', 'error'); searchInput.focus(); return; }
 
@@ -1948,7 +1953,21 @@ header {
       searchResult.innerHTML = '<div class="loading-wrap"><div class="spinner"></div><div>正在翻译「' + escapeHtml(raw) + '」为英文...</div></div>';
       searchBtn.classList.add('loading'); searchBtn.textContent = '翻译中';
 
+      /* 翻译同样有总预算，到点停止转圈 */
+      const cnBudget = setTimeout(() => {
+        if (stale()) return;
+        searchBtn.classList.remove('loading'); searchBtn.textContent = '查 词';
+        searchResult.innerHTML =
+          '<div class="error-wrap"><div class="err-icon">🌐</div><h3>翻译「' + escapeHtml(raw) + '」超时了</h3>' +
+          '<p>翻译服务响应超时，多为当前网络访问受限<br>请检查网络后重试，或直接输入英文单词查词</p>' +
+          '<button class="retry-btn" id="retrySearchBtn">重 试</button></div>';
+        const rb = document.getElementById('retrySearchBtn');
+        if (rb) rb.addEventListener('click', doSearch);
+      }, 8500);
+
       const enText = await translateEn(raw);
+      if (stale()) return;
+      clearTimeout(cnBudget);
       if (!enText) {
         searchResult.innerHTML =
           '<div class="error-wrap"><div class="err-icon">🌐</div><h3>无法翻译「' + escapeHtml(raw) + '」</h3>' +
@@ -1972,17 +1991,41 @@ header {
     }
 
     searchHint.classList.add('hidden');
-    searchResult.innerHTML = '<div class="loading-wrap"><div class="spinner"></div><div>正在查询「' + escapeHtml(word) + '」...</div></div>';
+    searchResult.innerHTML = '<div class="loading-wrap"><div class="spinner"></div><div id="searchLoadingText">正在查询「' + escapeHtml(word) + '」...</div></div>';
     searchBtn.classList.add('loading'); searchBtn.textContent = '查询中';
+
+    /* 看门狗：本地词库命中应毫秒级返回；一旦转圈超过 SEARCH_STAGE1_MS，提示已转入联网查询；
+       超过 SEARCH_BUDGET_MS 无论后台是否还在等，一律停止转圈并给出明确交代，绝不无限等待 */
+    const SEARCH_STAGE1_MS = 1200;
+    const SEARCH_BUDGET_MS = 6500;
+    const stageTimer = setTimeout(() => {
+      if (stale()) return;
+      const el = document.getElementById('searchLoadingText');
+      if (el) el.textContent = '本地词库未命中，正在联网查询「' + escapeHtml(word) + '」…';
+    }, SEARCH_STAGE1_MS);
+    const budgetTimer = setTimeout(() => {
+      if (stale()) return;
+      searchBtn.classList.remove('loading'); searchBtn.textContent = '查 词';
+      searchResult.innerHTML =
+        '<div class="error-wrap"><div class="err-icon">⏱️</div><h3>查询「' + escapeHtml(word) + '」超时了</h3>' +
+        '<p>该词不在本地词库中，联网词典又响应超时<br>多为当前网络访问外网词典受限所致</p>' +
+        '<p class="err-hint">建议：换网络重试（如手机流量），或稍后再试。常用词都内置在本地词库里，不受网络影响</p>' +
+        '<button class="retry-btn" id="retrySearchBtn">重 试</button></div>';
+      const rb = document.getElementById('retrySearchBtn');
+      if (rb) rb.addEventListener('click', doSearch);
+    }, SEARCH_BUDGET_MS);
 
     let res = null;
     try {
       res = await queryWordSmart(word, partial => {
         /* 网络源谁先返回就先渲染谁，不等全部完成 */
+        if (stale()) return;
         currentResult = partial;
         renderResult(partial);
       });
     } catch (e) {}
+    if (stale()) return; /* 用户已发起新查询，丢弃过期结果 */
+    clearTimeout(stageTimer); clearTimeout(budgetTimer);
     if (!res || !res.result) {
       searchResult.innerHTML =
         '<div class="error-wrap"><div class="err-icon">🔍</div><h3>没有查询到「' + escapeHtml(word) + '」的结果</h3>' +
@@ -5227,6 +5270,13 @@ header {
 
     /* 本地词库/缓存优先：命中即秒出，不发任何网络请求 */
     (async () => {
+      /* 弹窗看门狗：7 秒仍未查到就明确提示，不让"释义查询中..."永远挂着 */
+      const popupTimer = setTimeout(() => {
+        if (phoneticEl.textContent === '...' && cnEl.textContent.indexOf('释义查询中') !== -1) {
+          cnEl.innerHTML = '<div style="font-size:13px;color:var(--text-3);">未查到释义（网络不佳或生僻词）</div>';
+          phoneticEl.textContent = '';
+        }
+      }, 7000);
       try {
         const key = cleanLookupKey(word);
         if (key) {
@@ -5234,18 +5284,19 @@ header {
           if (cached) {
             dict = { phonetic: cached.phonetic, defs: cached.definitions || [], synonyms: cached.synonyms || [] };
             cn = { text: cached.chinese || '', cnDefs: cached.cnDefs || null };
+            clearTimeout(popupTimer);
             updatePopup();
             return;
           }
           const local = await lookupLocalDict(key);
           if (local) {
             const shaped = shapeLocalEntry(local.matched, local.entry);
-            if (shaped) { dict = shaped.dict; cn = shaped.cn; updatePopup(); return; }
+            if (shaped) { dict = shaped.dict; cn = shaped.cn; clearTimeout(popupTimer); updatePopup(); return; }
           }
         }
       } catch (e) {}
-      fetchDict(word).then(d => { if (d) { dict = d; updatePopup(); } }).catch(() => {});
-      translateCn(word).then(t => { cn = t; updatePopup(); }).catch(() => {});
+      fetchDict(word).then(d => { if (d) { dict = d; clearTimeout(popupTimer); updatePopup(); } }).catch(() => {});
+      translateCn(word).then(t => { cn = t; clearTimeout(popupTimer); updatePopup(); }).catch(() => {});
     })();
   }
 
